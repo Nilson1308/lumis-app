@@ -1,0 +1,16 @@
+# --- GERAL ---
+.DS_Store
+.vscode/
+.idea/
+
+# --- PYTHON / DJANGO ---
+backend/venv/
+backend/.env
+backend/db.sqlite3
+__pycache__/
+*.py[cod]
+
+# --- NODE / VUE ---
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
