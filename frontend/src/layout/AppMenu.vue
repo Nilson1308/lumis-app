@@ -33,7 +33,7 @@ const model = computed(() => {
         menuItems.push({
             label: 'Professor',
             items: [
-                { label: 'Meus Diários', icon: 'pi pi-fw pi-calendar', to: { name: 'dashboard' } }, // Placeholder
+                { label: 'Meus Diários', icon: 'pi pi-fw pi-calendar', to: { name: 'my-classes' } },
                 { label: 'Lançar Notas', icon: 'pi pi-fw pi-pencil', to: { name: 'dashboard' } }   // Placeholder
             ]
         });

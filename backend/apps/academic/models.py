@@ -1,5 +1,6 @@
 from django.db import models
-from django.conf import settings # Para vincular ao User (Professor)
+from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Segment(models.Model):
     """Ex: Educação Infantil, Fundamental I, Médio"""
@@ -75,3 +76,40 @@ class TeacherAssignment(models.Model):
 
     def __str__(self):
         return f"{self.teacher} - {self.subject} ({self.classroom})"
+
+class Grade(models.Model):
+    """Lançamento de Notas"""
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, verbose_name="Matrícula")
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, verbose_name="Matéria")
+    # Ex: "Prova 1", "Trabalho Bimestral", "Simulado"
+    name = models.CharField("Avaliação", max_length=50) 
+    # Nota de 0.00 a 10.00
+    value = models.DecimalField("Nota", max_digits=4, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(10)])
+    weight = models.DecimalField("Peso", max_digits=4, decimal_places=2, default=1.00, validators=[MinValueValidator(0)])
+    date = models.DateField("Data da Avaliação", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Nota"
+        verbose_name_plural = "Notas"
+        # Garante que não lance a mesma prova duas vezes pro mesmo aluno (opcional, mas bom)
+        # unique_together = ('enrollment', 'subject', 'name') 
+
+    def __str__(self):
+        return f"{self.enrollment.student.name} - {self.name}: {self.value}"
+
+class Attendance(models.Model):
+    """Lançamento de Frequência (Diário de Classe)"""
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, verbose_name="Matrícula")
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, verbose_name="Matéria")
+    date = models.DateField("Data da Aula")
+    present = models.BooleanField("Presente", default=True) # True = Presente, False = Falta
+
+    class Meta:
+        verbose_name = "Frequência"
+        verbose_name_plural = "Frequências"
+        # Um aluno só pode ter um registro de presença por matéria no dia
+        unique_together = ('enrollment', 'subject', 'date')
+
+    def __str__(self):
+        status = "Presente" if self.present else "Faltou"
+        return f"{self.date} - {self.enrollment.student.name}: {status}"

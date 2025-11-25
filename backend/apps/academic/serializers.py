@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Segment, ClassRoom, Subject, Student, Enrollment, TeacherAssignment
+from .models import Segment, ClassRoom, Subject, Student, Enrollment, TeacherAssignment, Grade, Attendance
 
 class SegmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -76,3 +76,17 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TeacherAssignment
         fields = ['id', 'teacher', 'teacher_name', 'subject', 'subject_name', 'classroom', 'classroom_name', 'classroom_year']
+
+class GradeSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
+    
+    class Meta:
+        model = Grade
+        fields = '__all__'
+
+class AttendanceSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
+
+    class Meta:
+        model = Attendance
+        fields = '__all__'

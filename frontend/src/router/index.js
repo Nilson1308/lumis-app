@@ -36,6 +36,18 @@ const router = createRouter({
                     component: () => import('@/views/pages/SubjectsList.vue')
                 },
                 {
+                    path: '/teacher/classes/:id/gradebook', 
+                    name: 'class-gradebook',
+                    component: () => import('@/views/pages/teacher/GradeBook.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
+                    path: '/teacher/classes/:id/attendance',
+                    name: 'class-attendance',
+                    component: () => import('@/views/pages/teacher/AttendanceClass.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
                     path: '/enrollments',
                     name: 'enrollments',
                     component: () => import('@/views/pages/EnrollmentList.vue')
@@ -44,6 +56,12 @@ const router = createRouter({
                     path: '/assignments',
                     name: 'assignments',
                     component: () => import('@/views/pages/AssignmentList.vue')
+                },
+                {
+                    path: '/teacher/classes',
+                    name: 'my-classes',
+                    component: () => import('@/views/pages/teacher/MyClasses.vue'),
+                    meta: { requiresAuth: true }
                 },
                 {
                     path: '/uikit/formlayout',
