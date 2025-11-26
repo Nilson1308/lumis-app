@@ -64,6 +64,24 @@ const router = createRouter({
                     meta: { requiresAuth: true }
                 },
                 {
+                    path: '/coordination/observations',
+                    name: 'observations',
+                    component: () => import('@/views/pages/coordination/ObservationList.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
+                    path: '/coordination/minutes',
+                    name: 'meeting-minutes',
+                    component: () => import('@/views/pages/coordination/MeetingMinutes.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
+                    path: '/coordination/weekly-reports',
+                    name: 'weekly-reports',
+                    component: () => import('@/views/pages/coordination/WeeklyReportList.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
                     path: '/uikit/formlayout',
                     name: 'formlayout',
                     component: () => import('@/views/uikit/FormLayout.vue')

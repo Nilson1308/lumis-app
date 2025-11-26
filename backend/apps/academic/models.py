@@ -77,6 +77,20 @@ class TeacherAssignment(models.Model):
     def __str__(self):
         return f"{self.teacher} - {self.subject} ({self.classroom})"
 
+class AcademicPeriod(models.Model):
+    name = models.CharField("Nome", max_length=20) # Ex: 1º Bimestre
+    start_date = models.DateField("Início")
+    end_date = models.DateField("Fim")
+    is_active = models.BooleanField("Período Ativo?", default=False) # Só um pode ser True
+
+    class Meta:
+        verbose_name = "Período Letivo"
+        verbose_name_plural = "Períodos Letivos"
+        ordering = ['start_date']
+
+    def __str__(self):
+        return self.name
+
 class Grade(models.Model):
     """Lançamento de Notas"""
     enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, verbose_name="Matrícula")
@@ -87,6 +101,7 @@ class Grade(models.Model):
     value = models.DecimalField("Nota", max_digits=4, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(10)])
     weight = models.DecimalField("Peso", max_digits=4, decimal_places=2, default=1.00, validators=[MinValueValidator(0)])
     date = models.DateField("Data da Avaliação", auto_now_add=True)
+    period = models.ForeignKey(AcademicPeriod, on_delete=models.PROTECT, verbose_name="Período", null=True, blank=True)
 
     class Meta:
         verbose_name = "Nota"
@@ -103,6 +118,7 @@ class Attendance(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, verbose_name="Matéria")
     date = models.DateField("Data da Aula")
     present = models.BooleanField("Presente", default=True) # True = Presente, False = Falta
+    period = models.ForeignKey(AcademicPeriod, on_delete=models.PROTECT, verbose_name="Período", null=True, blank=True)
 
     class Meta:
         verbose_name = "Frequência"

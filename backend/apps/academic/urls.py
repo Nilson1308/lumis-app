@@ -1,9 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from . import reports
 from .views import (
     SegmentViewSet, ClassRoomViewSet, StudentViewSet, 
     EnrollmentViewSet, SubjectViewSet, TeacherAssignmentViewSet,
-    GradeViewSet, AttendanceViewSet
+    GradeViewSet, AttendanceViewSet, AcademicPeriodViewSet,
+    DashboardDataView
 )
 
 router = DefaultRouter()
@@ -15,7 +17,10 @@ router.register(r'subjects', SubjectViewSet)
 router.register(r'assignments', TeacherAssignmentViewSet)
 router.register(r'grades', GradeViewSet)
 router.register(r'attendance', AttendanceViewSet)
+router.register(r'periods', AcademicPeriodViewSet)
 
 urlpatterns = [
+    path('dashboard/data/', DashboardDataView.as_view(), name='dashboard_data'),
+    path('reports/student_card/<int:enrollment_id>/', reports.generate_student_report_card, name='student_report_card'),
     path('', include(router.urls)),
 ]

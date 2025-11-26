@@ -11,6 +11,10 @@ const allClassrooms = ref([]); // Todas as turmas do banco
 const availableYears = ref([]); // Anos extraídos das turmas (ex: [2024, 2025])
 const students = ref([]);
 const loading = ref(false);
+const printDialog = ref(false);
+const printOptions = ref([]);
+const selectedPrintPeriod = ref(null);
+const studentToPrint = ref(null);
 
 // --- FILTROS SELECIONADOS ---
 const selectedYear = ref(null);
@@ -31,6 +35,28 @@ const filteredClassrooms = computed(() => {
     if (!selectedYear.value) return [];
     return allClassrooms.value.filter(c => c.year === selectedYear.value);
 });
+
+// Carrega os períodos e adiciona a opção "Final"
+const loadPrintOptions = async () => {
+    try {
+        const res = await api.get('periods/');
+        const periods = res.data.results || res.data;
+        
+        // Monta as opções do Dropdown
+        printOptions.value = [
+            { name: 'Boletim Final (Todos os Períodos)', id: null }, // ID null = Final
+            ...periods // Espalha os bimestres (1º Bim, 2º Bim...)
+        ];
+    } catch (e) { console.error(e); }
+};
+
+// Abre o modal
+const openPrintDialog = (enrollmentId) => {
+    studentToPrint.value = enrollmentId;
+    selectedPrintPeriod.value = null; // Padrão: Final
+    if (printOptions.value.length === 0) loadPrintOptions(); // Carrega se não tiver
+    printDialog.value = true;
+};
 
 // --- API: CARREGAR DADOS INICIAIS ---
 const loadDependencies = async () => {
@@ -144,6 +170,30 @@ const deleteEnrollment = async () => {
     }
 };
 
+// Gera o PDF
+const generatePDF = () => {
+    let url = `reports/student_card/${studentToPrint.value}/`;
+    
+    // Se escolheu um período específico, adiciona na URL
+    if (selectedPrintPeriod.value) {
+        url += `?period=${selectedPrintPeriod.value}`;
+    }
+
+    loading.value = true;
+    api.get(url, { responseType: 'blob' })
+        .then(response => {
+            const fileURL = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+            const fileLink = document.createElement('a');
+            fileLink.href = fileURL;
+            fileLink.setAttribute('target', '_blank');
+            document.body.appendChild(fileLink);
+            fileLink.click();
+            printDialog.value = false; // Fecha modal
+        })
+        .catch(() => toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao gerar PDF' }))
+        .finally(() => loading.value = false);
+};
+
 onMounted(() => {
     loadDependencies();
 });
@@ -220,8 +270,14 @@ onMounted(() => {
                     </template>
                 </Column>
                 
-                <Column header="Ações" style="width: 10%">
+                <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
+                        <Button 
+                            icon="pi pi-print" 
+                            class="p-button-rounded p-button-secondary p-button-text mr-2" 
+                            v-tooltip.top="'Imprimir Boletim'"
+                            @click="openPrintDialog(slotProps.data.id)" 
+                        />
                         <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-text" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
@@ -246,14 +302,32 @@ onMounted(() => {
                 </template>
             </Dialog>
 
-                <Dialog v-model:visible="deleteDialog" header="Remover Matrícula" :modal="true" :style="{ width: '450px' }">
-                    <div class="flex align-items-center justify-content-center">
+            <Dialog v-model:visible="deleteDialog" header="Remover Matrícula" :modal="true" :style="{ width: '450px' }">
+                <div class="flex align-items-center justify-content-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Tem certeza que deseja remover este aluno desta turma?</span>
                 </div>
                 <template #footer>
                     <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteDialog = false" />
                     <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteEnrollment" />
+                </template>
+            </Dialog>
+
+            <Dialog v-model:visible="printDialog" header="Gerar Boletim" :modal="true" :style="{ width: '350px' }">
+                <div class="field">
+                    <label class="mb-3 block font-bold">Selecione o Tipo</label>
+                    <Dropdown 
+                        v-model="selectedPrintPeriod" 
+                        :options="printOptions" 
+                        optionLabel="name" 
+                        optionValue="id" 
+                        placeholder="Selecione..." 
+                        class="w-full"
+                    />
+                </div>
+                <template #footer>
+                    <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="printDialog = false" />
+                    <Button label="Gerar PDF" icon="pi pi-file-pdf" @click="generatePDF" :loading="loading" />
                 </template>
             </Dialog>
 

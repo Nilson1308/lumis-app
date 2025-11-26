@@ -3,7 +3,8 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from faker import Faker
 from apps.core.models import User
-from apps.academic.models import Segment, ClassRoom, Subject, Student, Enrollment, TeacherAssignment
+from apps.academic.models import Segment, ClassRoom, Subject, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod
+from datetime import date
 
 class Command(BaseCommand):
     help = 'Popula o banco de dados com dados de teste (Fake)'
@@ -25,7 +26,16 @@ class Command(BaseCommand):
             # Removemos apenas usuários que são professores fake, mantemos o admin
             User.objects.filter(is_teacher=True).delete()
 
-            # 2. Criar Segmentos
+            # 2. Criar Períodos (NOVO)
+            self.stdout.write('Criando Bimestres...')
+            p1 = AcademicPeriod.objects.create(name='1º Bimestre', start_date=date(2025, 2, 1), end_date=date(2025, 4, 30), is_active=False)
+            p2 = AcademicPeriod.objects.create(name='2º Bimestre', start_date=date(2025, 5, 1), end_date=date(2025, 7, 15), is_active=False)
+            p3 = AcademicPeriod.objects.create(name='3º Bimestre', start_date=date(2025, 8, 1), end_date=date(2025, 9, 30), is_active=False)
+            p4 = AcademicPeriod.objects.create(name='4º Bimestre', start_date=date(2025, 10, 1), end_date=date(2025, 12, 15), is_active=True) # Ativo
+            
+            all_periods = [p1, p2, p3, p4]
+
+            # 2.1 Criar Segmentos
             self.stdout.write('Criando Segmentos...')
             segments_list = ['Educação Infantil', 'Fundamental I', 'Fundamental II', 'Ensino Médio']
             segments_objs = [Segment(name=s) for s in segments_list]
@@ -100,5 +110,24 @@ class Command(BaseCommand):
                         subject=subject,
                         classroom=classroom
                     )
+
+            # 8. Criar Notas Fakes (NOVO)
+            self.stdout.write('Lançando Notas Fakes...')
+            enrollments = Enrollment.objects.all()
+            
+            for enroll in enrollments:
+                # Pega as matérias da turma desse aluno
+                # (Simplificação: pega 3 matérias aleatórias)
+                for subject in random.sample(all_subjects, 3):
+                    # Lança nota nos 3 primeiros bimestres
+                    for period in [p1, p2, p3]:
+                        Grade.objects.create(
+                            enrollment=enroll,
+                            subject=subject,
+                            period=period,
+                            name='Prova Mensal',
+                            value=random.uniform(5.0, 10.0),
+                            weight=1
+                        )
 
         self.stdout.write(self.style.SUCCESS('✅ Banco de dados populado com sucesso!'))

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
@@ -8,84 +8,111 @@ const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 
-// ID da Atribuição vindo da URL (ex: /teacher/classes/5/gradebook)
 const assignmentId = route.params.id;
 
 // --- ESTADOS ---
-const assignment = ref(null); // Dados da turma/matéria atual
-const students = ref([]);     // Lista de alunos da turma
+const assignment = ref(null);
+const students = ref([]);
+const periods = ref([]); // Lista de Bimestres
+const selectedPeriod = ref(null); // Bimestre Selecionado (ID)
 const loading = ref(true);
 
 // --- DIALOG DE NOTA ---
 const gradeDialog = ref(false);
-const currentStudent = ref({}); // Aluno selecionado para dar nota
+const currentStudent = ref({});
 const gradeForm = ref({
     name: '',
     value: null,
-    weight: 1.0 // Padrão é 1
+    weight: 1.0
 });
 
-// --- CARREGAR DADOS ---
+// --- CARREGAR DEPENDÊNCIAS (Períodos) ---
+const loadPeriods = async () => {
+    try {
+        const res = await api.get('periods/');
+        periods.value = res.data.results || res.data;
+
+        // Tenta achar o período ativo (is_active = true)
+        const active = periods.value.find(p => p.is_active);
+        
+        if (active) {
+            selectedPeriod.value = active.id;
+        } else if (periods.value.length > 0) {
+            // Se nenhum estiver ativo, pega o último (mais recente)
+            selectedPeriod.value = periods.value[periods.value.length - 1].id;
+        }
+        
+        // Só carrega a turma depois de ter um período definido
+        if (selectedPeriod.value) {
+            loadClassData();
+        }
+    } catch (e) {
+        console.error("Erro ao carregar períodos");
+    }
+};
+
+// --- CARREGAR DADOS DA TURMA ---
 const loadClassData = async () => {
+    if (!selectedPeriod.value) return; // Segurança
+
+    console.log("BUSCANDO NOTAS DO PERÍODO ID:", selectedPeriod.value);
+
     loading.value = true;
     try {
-        // 1. Busca detalhes da Atribuição (para saber qual é a turma e a matéria)
         const resAssign = await api.get(`assignments/${assignmentId}/`);
         assignment.value = resAssign.data;
 
-        // 2. Busca os alunos matriculados nesta turma
-        // Filtramos enrollments pela turma da atribuição
         const resEnroll = await api.get(`enrollments/?classroom=${assignment.value.classroom}&page_size=100`);
         
-        // 3. Busca as notas já lançadas para esta turma e matéria
-        const resGrades = await api.get(`grades/?enrollment__classroom=${assignment.value.classroom}&subject=${assignment.value.subject}&page_size=1000`);
+        // AGORA FILTRAMOS AS NOTAS PELO PERÍODO SELECIONADO
+        const resGrades = await api.get(`grades/?enrollment__classroom=${assignment.value.classroom}&subject=${assignment.value.subject}&period=${selectedPeriod.value}&page_size=1000`);
+        
         const allGrades = resGrades.data.results;
 
-        // 4. Mágica: Cruzar Alunos com suas Notas para exibir na tela
         students.value = resEnroll.data.results.map(enrollment => {
-            // Filtra notas apenas deste aluno
             const studentGrades = allGrades.filter(g => g.enrollment === enrollment.id);
-
-            // --- CÁLCULO DE MÉDIA PONDERADA ---
-            let weightedSum = 0; // Soma das (Nota * Peso)
-            let totalWeight = 0; // Soma dos Pesos
-
+            
+            // Cálculo Média Ponderada
+            let weightedSum = 0;
+            let totalWeight = 0;
             studentGrades.forEach(g => {
                 const val = parseFloat(g.value);
-                const w = parseFloat(g.weight || 1); // Garante peso 1 se vier nulo
-                
+                const w = parseFloat(g.weight || 1);
                 weightedSum += (val * w);
                 totalWeight += w;
             });
 
-            // Evita divisão por zero
             const avg = totalWeight > 0 ? (weightedSum / totalWeight).toFixed(1) : '-';
 
             return {
-                ...enrollment, 
-                grades: studentGrades, 
+                ...enrollment,
+                grades: studentGrades,
                 average: avg
             };
         });
 
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar diário.', life: 3000 });
-        console.error(error);
     } finally {
         loading.value = false;
     }
 };
 
+// Se trocar o bimestre no dropdown, recarrega a tabela
+watch(selectedPeriod, () => {
+    loadClassData();
+});
+
 // --- AÇÕES ---
 const openGradeDialog = (studentWrapper) => {
     currentStudent.value = studentWrapper;
-    gradeForm.value = { name: '', value: null, weight: 1.0 }; // Reseta com peso 1
+    gradeForm.value = { name: '', value: null, weight: 1.0 };
     gradeDialog.value = true;
 };
 
 const saveGrade = async () => {
     if (!gradeForm.value.name || gradeForm.value.value === null) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha nome e nota.', life: 3000 });
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha os dados.', life: 3000 });
         return;
     }
 
@@ -95,14 +122,15 @@ const saveGrade = async () => {
             subject: assignment.value.subject,
             name: gradeForm.value.name,
             value: gradeForm.value.value,
-            weight: gradeForm.value.weight // <--- Envia o peso
+            weight: gradeForm.value.weight,
+            period: selectedPeriod.value // <--- IMPORTANTE: Salva no bimestre atual
         };
 
         await api.post('grades/', payload);
         
         toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Nota lançada!', life: 3000 });
         gradeDialog.value = false;
-        loadClassData(); // Recarrega tudo para atualizar a média e lista
+        loadClassData();
         
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar nota.', life: 3000 });
@@ -114,7 +142,7 @@ const goBack = () => {
 };
 
 onMounted(() => {
-    loadClassData();
+    loadPeriods(); // Começa carregando os bimestres
 });
 </script>
 
@@ -123,24 +151,36 @@ onMounted(() => {
         <div class="card">
             <Toast />
 
-            <div class="flex justify-content-between align-items-center mb-4" v-if="assignment">
-                <div>
+            <div class="flex flex-column md:flex-row justify-content-between align-items-center mb-4" v-if="assignment">
+                <div class="flex align-items-center mb-3 md:mb-0">
                     <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="goBack" />
-                    <span class="text-xl font-bold align-middle">{{ assignment.subject_name }} - {{ assignment.classroom_name }}</span>
+                    <div>
+                        <span class="block text-xl font-bold">{{ assignment.subject_name }}</span>
+                        <span class="text-600">{{ assignment.classroom_name }}</span>
+                    </div>
                 </div>
-                <div>
-                    <Tag :value="students.length + ' Alunos'" severity="info" />
+                
+                <div class="flex align-items-center gap-3">
+                    <span class="font-bold">Período:</span>
+                    <Dropdown 
+                        v-model="selectedPeriod" 
+                        :options="periods" 
+                        optionLabel="name" 
+                        optionValue="id" 
+                        placeholder="Selecione..." 
+                        class="w-12rem"
+                    />
                 </div>
             </div>
 
-            <DataTable :value="students" :loading="loading" responsiveLayout="scroll">
+            <DataTable :value="students" :loading="loading" responsiveLayout="scroll" stripedRows>
                 <template #empty>Nenhum aluno nesta turma.</template>
 
-                <Column field="student_name" header="Aluno" sortable></Column>
+                <Column field="student_name" header="Aluno" sortable style="min-width: 200px"></Column>
                 
-                <Column header="Avaliações">
+                <Column header="Avaliações do Bimestre">
                     <template #body="slotProps">
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 flex-wrap">
                             <span v-for="grade in slotProps.data.grades" :key="grade.id">
                                 <Tag 
                                     :value="grade.value" 
@@ -148,12 +188,12 @@ onMounted(() => {
                                     v-tooltip.top="`${grade.name} (Peso: ${grade.weight})`" 
                                 />
                             </span>
-                            <span v-if="slotProps.data.grades.length === 0" class="text-500 text-sm italic">Sem notas</span>
+                            <span v-if="slotProps.data.grades.length === 0" class="text-500 text-sm italic">Sem notas neste bimestre</span>
                         </div>
                     </template>
                 </Column>
 
-                <Column field="average" header="Média Atual" style="width: 10%">
+                <Column field="average" header="Média Bim." style="width: 100px; text-align: center">
                     <template #body="slotProps">
                         <strong :class="{'text-red-500': slotProps.data.average < 6 && slotProps.data.average !== '-'}">
                             {{ slotProps.data.average }}
@@ -161,7 +201,7 @@ onMounted(() => {
                     </template>
                 </Column>
 
-                <Column header="Ação" style="width: 10%">
+                <Column header="Ação" style="width: 80px">
                     <template #body="slotProps">
                         <Button icon="pi pi-plus" class="p-button-rounded p-button-sm" v-tooltip.top="'Lançar Nota'" @click="openGradeDialog(slotProps.data)" />
                     </template>
@@ -174,7 +214,7 @@ onMounted(() => {
                         <label>Nome da Avaliação</label>
                         <InputText v-model="gradeForm.name" placeholder="Ex: Trabalho, Prova..." autofocus />
                     </div>
-
+                    
                     <div class="field col-6">
                         <label>Nota (0-10)</label>
                         <InputNumber v-model="gradeForm.value" mode="decimal" :min="0" :max="10" :minFractionDigits="1" :maxFractionDigits="2" showButtons />
@@ -183,7 +223,6 @@ onMounted(() => {
                     <div class="field col-6">
                         <label>Peso</label>
                         <InputNumber v-model="gradeForm.weight" mode="decimal" :min="0.1" :max="10" :step="0.5" showButtons suffix="x" />
-                        <small class="text-500">Padrão: 1.0</small>
                     </div>
                 </div>
                 <template #footer>

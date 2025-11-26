@@ -1,12 +1,16 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, permissions
+from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from .models import Segment, ClassRoom, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance
+from django.db.models import Count, Avg, Q
+from django.contrib.auth import get_user_model
+User = get_user_model()
+from .models import Segment, ClassRoom, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance, AcademicPeriod
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
     EnrollmentSerializer, SubjectSerializer, TeacherAssignmentSerializer,
-    GradeSerializer, AttendanceSerializer
+    GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer
 )
 
 class SegmentViewSet(viewsets.ModelViewSet):
@@ -66,12 +70,12 @@ class TeacherAssignmentViewSet(viewsets.ModelViewSet):
 class GradeViewSet(viewsets.ModelViewSet):
     queryset = Grade.objects.all().order_by('date')
     serializer_class = GradeSerializer
-    filterset_fields = ['enrollment', 'subject', 'enrollment__classroom'] 
+    filterset_fields = ['enrollment', 'subject', 'enrollment__classroom', 'period']
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     queryset = Attendance.objects.all().order_by('date')
     serializer_class = AttendanceSerializer
-    filterset_fields = ['enrollment', 'subject', 'date']
+    filterset_fields = ['enrollment', 'subject', 'date', 'period']
 
     @action(detail=False, methods=['post'])
     def bulk_save(self, request):
@@ -115,3 +119,45 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             "created": created_count,
             "updated": updated_count
         })
+
+class AcademicPeriodViewSet(viewsets.ModelViewSet):
+    queryset = AcademicPeriod.objects.all().order_by('start_date') 
+    serializer_class = AcademicPeriodSerializer
+    search_fields = ['name']
+
+class DashboardDataView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # 1. Cards (KPIs)
+        total_students = Student.objects.count()
+        total_classes = ClassRoom.objects.count()
+        # Conta usuários que são professores
+        total_teachers = User.objects.filter(is_teacher=True).count() 
+        
+        # Alunos em risco (Média geral abaixo de 6) - Lógica simplificada para MVP
+        # Idealmente filtraríamos pelo bimestre atual
+        risk_students = 0 
+        # (Deixaremos 0 por enquanto para não pesar a query no MVP, 
+        # mas aqui entraria uma query de agregação de notas)
+
+        # 2. Gráfico de Pizza: Alunos por Segmento
+        # Retorna: [{'segment__name': 'Infantil', 'total': 50}, ...]
+        students_by_segment = Student.objects.values('enrollment__classroom__segment__name').annotate(total=Count('id')).order_by('total')
+
+        # 3. Gráfico de Barras: Média da Escola por Matéria (Top 5)
+        avg_by_subject = Grade.objects.values('subject__name').annotate(avg=Avg('value')).order_by('-avg')[:5]
+
+        data = {
+            'cards': {
+                'students': total_students,
+                'classes': total_classes,
+                'teachers': total_teachers,
+                'risk': risk_students
+            },
+            'charts': {
+                'segment_distribution': students_by_segment,
+                'subject_performance': avg_by_subject
+            }
+        }
+        return Response(data)
