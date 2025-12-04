@@ -100,7 +100,7 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Nova Ata" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Nova Ata" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
             </Toolbar>
@@ -119,41 +119,41 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 20%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editMinute(slotProps.data)" v-tooltip.top="'Editar/Ver Detalhes'" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDelete(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editMinute(slotProps.data)" v-tooltip.top="'Editar/Ver Detalhes'" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
 
             <Dialog v-model:visible="minuteDialog" :style="{ width: '700px' }" header="Registro de Reunião" :modal="true" class="p-fluid">
                 
-                <div class="formgrid grid">
-                    <div class="field col-8">
-                        <label class="font-bold">Título / Pauta Principal</label>
-                        <InputText v-model="minute.title" required="true" autofocus :class="{ 'p-invalid': submitted && !minute.title }" />
+                <div class="grid grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-8">
+                        <label class="mb-2 block font-bold">Título / Pauta Principal</label>
+                        <InputText v-model="minute.title" required="true" autofocus :class="{ 'p-invalid': submitted && !minute.title }" fluid />
                         <small class="p-error" v-if="submitted && !minute.title">Título obrigatório.</small>
                     </div>
-                    <div class="field col-4">
-                        <label class="font-bold">Data</label>
-                        <Calendar v-model="minute.date" dateFormat="dd/mm/yy" showIcon />
+                    <div class="col-span-12 xl:col-span-4">
+                        <label class="mb-2 block font-bold">Data</label>
+                        <Calendar v-model="minute.date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
                 </div>
 
-                <div class="field">
-                    <label class="font-bold">Participantes</label>
-                    <InputText v-model="minute.participants" placeholder="Ex: Livia, Nilson, Coordenadores..." />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Participantes</label>
+                    <InputText v-model="minute.participants" placeholder="Ex: Livia, Nilson, Coordenadores..." fluid />
                     <small class="text-500">Liste os nomes separados por vírgula.</small>
                 </div>
 
-                <div class="field">
-                    <label class="font-bold">Conteúdo / Decisões</label>
-                    <Textarea v-model="minute.content" rows="10" autoResize placeholder="Descreva o que foi discutido e decidido..." :class="{ 'p-invalid': submitted && !minute.content }" />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Conteúdo / Decisões</label>
+                    <Textarea v-model="minute.content" rows="10" autoResize placeholder="Descreva o que foi discutido e decidido..." :class="{ 'p-invalid': submitted && !minute.content }" fluid />
                     <small class="p-error" v-if="submitted && !minute.content">Conteúdo obrigatório.</small>
                 </div>
 
-                <div class="field">
-                    <label class="font-bold">Próximos Passos / Tarefas</label>
-                    <Textarea v-model="minute.next_steps" rows="3" autoResize placeholder="O que ficou para fazer? Quem fará?" />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Próximos Passos / Tarefas</label>
+                    <Textarea v-model="minute.next_steps" rows="3" autoResize placeholder="O que ficou para fazer? Quem fará?" fluid />
                 </div>
 
                 <template #footer>
@@ -163,7 +163,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Deseja excluir este registro permanentemente?</span>
                 </div>

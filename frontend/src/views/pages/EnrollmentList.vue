@@ -204,7 +204,7 @@ onMounted(() => {
         <div class="card">
             <Toast />
 
-            <div class="flex flex-column md:flex-row gap-4 mb-4 align-items-end p-fluid">
+            <div class="flex flex-column md:flex-row gap-4 mb-4 align-end p-fluid">
                 <div class="col-12 md:col-2">
                     <label class="block font-bold mb-2">Ano Letivo</label>
                     <Dropdown 
@@ -274,11 +274,11 @@ onMounted(() => {
                     <template #body="slotProps">
                         <Button 
                             icon="pi pi-print" 
-                            class="p-button-rounded p-button-secondary p-button-text mr-2" 
+                            class="p-button-rounded mr-2" 
                             v-tooltip.top="'Imprimir Boletim'"
                             @click="openPrintDialog(slotProps.data.id)" 
                         />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-danger p-button-text" @click="confirmDelete(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
@@ -303,7 +303,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" header="Remover Matrícula" :modal="true" :style="{ width: '450px' }">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-items-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Tem certeza que deseja remover este aluno desta turma?</span>
                 </div>

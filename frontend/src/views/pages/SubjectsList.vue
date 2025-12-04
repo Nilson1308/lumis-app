@@ -137,7 +137,7 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Nova Matéria" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Nova Matéria" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
             </Toolbar>
@@ -170,8 +170,8 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 20%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editSubject(slotProps.data)" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDeleteSubject(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editSubject(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteSubject(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
@@ -192,7 +192,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span v-if="subject">Tem certeza que deseja excluir <b>{{ subject.name }}</b>?</span>
                 </div>

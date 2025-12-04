@@ -2,56 +2,146 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Boletim Escolar</title>
+    <title>Boletim Escolar - Saint Thomas'</title>
     <style>
         @page {
+            /* Mudança para Paisagem para caber melhor as notas */
             size: A4;
-            margin: 2cm;
+            margin: 1.5cm;
             @bottom-right {
                 content: "Página " counter(page) " de " counter(pages);
                 font-size: 10px;
+                color: #999999;
             }
         }
-        body { font-family: 'Helvetica', sans-serif; color: #333; }
         
-        .header { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #800000; padding-bottom: 10px; }
-        .header h1 { margin: 0; color: #800000; text-transform: uppercase; font-size: 24px; }
-        .header p { margin: 5px 0; font-size: 12px; color: #666; }
-
-        .info-box { background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 30px; display: flex; justify-content: space-between; }
-        .info-row { margin-bottom: 5px; }
-        .label { font-weight: bold; color: #555; }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: center; font-size: 13px; }
-        th { background-color: #800000; color: white; text-align: left; }
-        td.subject { text-align: left; font-weight: bold; }
+        body { 
+            font-family: 'Helvetica', sans-serif; 
+            color: #000000; /* Texto principal preto */
+        }
         
-        .status-aprovado { color: green; font-weight: bold; }
-        .status-recuperacao { color: red; font-weight: bold; }
+        /* CABEÇALHO */
+        .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 3px solid #c1272d; /* Cor Secundária (Vermelho) */
+            padding-bottom: 15px; 
+        }
+        
+        .logo {
+            height: 80px; /* Ajuste conforme a qualidade da logo */
+            margin-bottom: 10px;
+        }
 
-        .footer { margin-top: 50px; text-align: center; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 10px; }
+        .header h1 { 
+            margin: 5px 0; 
+            color: #292664; /* Cor Primária (Azul) */
+            text-transform: uppercase; 
+            font-size: 26px; 
+            letter-spacing: 1px;
+        }
+        
+        .header p { 
+            margin: 0; 
+            font-size: 12px; 
+            color: #999999; /* Texto claro */
+            text-transform: uppercase;
+        }
+
+        /* CAIXA DE INFORMAÇÕES DO ALUNO */
+        .info-box { 
+            background: #f4f4f4; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin-bottom: 30px; 
+            border-left: 5px solid #292664; /* Detalhe Azul */
+        }
+        
+        /* Layout de colunas flutuantes para PDF (WeasyPrint lida bem com float) */
+        .col-left { float: left; width: 60%; }
+        .col-right { float: right; width: 35%; }
+        .clearfix { clear: both; }
+
+        .info-row { margin-bottom: 8px; font-size: 14px; }
+        .label { 
+            font-weight: bold; 
+            color: #292664; /* Azul nos labels */
+            margin-right: 5px;
+        }
+
+        /* TÍTULO DO RELATÓRIO */
+        h3.report-title {
+            color: #292664;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+            margin-top: 0;
+        }
+
+        /* TABELA DE NOTAS */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        
+        th, td { 
+            border: 1px solid #ddd; 
+            padding: 12px 8px; 
+            text-align: center; 
+            font-size: 13px; 
+        }
+        
+        th { 
+            background-color: #292664; /* Cabeçalho Azul */
+            color: white; 
+            text-transform: uppercase;
+            font-size: 11px;
+            font-weight: normal;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Destaque para a primeira coluna (Matéria) */
+        td.subject { 
+            text-align: left; 
+            font-weight: bold; 
+            color: #292664;
+            background-color: #fcfcfc;
+        }
+        
+        /* Cores de Status */
+        .status-aprovado { color: #292664; font-weight: bold; } /* Azul ou Verde Escuro */
+        .status-recuperacao { color: #c1272d; font-weight: bold; } /* Vermelho da marca */
+
+        /* RODAPÉ */
+        .footer { 
+            margin-top: 50px; 
+            text-align: center; 
+            font-size: 10px; 
+            color: #999999; 
+            border-top: 1px solid #eee; 
+            padding-top: 10px; 
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>Colégio Bilíngue Saint Thomas</h1>
-        <p>Sistema de Gestão Acadêmica - Lumis</p>
+        {% if logo_url %}
+            <img src="{{ logo_url }}" class="logo" alt="Saint Thomas School">
+        {% endif %}
+        
+        <h1>Saint Thomas' International School</h1>
+        <p>British Education | Sistema de Gestão Acadêmica</p>
     </div>
 
     <div class="info-box">
-        <div style="float: left; width: 60%;">
-            <div class="info-row"><span class="label">Aluno:</span> {{ student.name }}</div>
-            <div class="info-row"><span class="label">Matrícula:</span> {{ student.registration_number }}</div>
+        <div class="col-left">
+            <div class="info-row"><span class="label">ALUNO:</span> {{ student.name }}</div>
+            <div class="info-row"><span class="label">MATRÍCULA:</span> {{ student.registration_number }}</div>
         </div>
-        <div style="float: right; width: 35%;">
-            <div class="info-row"><span class="label">Turma:</span> {{ classroom.name }}</div>
-            <div class="info-row"><span class="label">Ano Letivo:</span> {{ classroom.year }}</div>
+        <div class="col-right">
+            <div class="info-row"><span class="label">TURMA:</span> {{ classroom.name }}</div>
+            <div class="info-row"><span class="label">ANO LETIVO:</span> {{ classroom.year }}</div>
         </div>
-        <div style="clear: both;"></div>
+        <div class="clearfix"></div>
     </div>
 
-    <h3>
+    <h3 class="report-title">
         {% if is_partial %}
             Boletim Parcial - {{ periods_header.0.name }}
         {% else %}
@@ -82,26 +172,26 @@
                     <td>{{ grade }}</td>
                 {% endfor %}
 
-                <td style="font-weight: bold;">{{ item.final_average }}</td>
+                <td style="font-weight: bold; background-color: #f9f9f9;">{{ item.final_average }}</td>
                 <td>{{ item.total_absences }}</td>
                 <td>
                     {% if item.status == 'Aprovado' %}
-                        <span style="color: green;">{{ item.status }}</span>
+                        <span class="status-aprovado">{{ item.status }}</span>
                     {% elif item.status == 'Recuperação' %}
-                        <span style="color: red;">{{ item.status }}</span>
+                        <span class="status-recuperacao">{{ item.status }}</span>
                     {% else %}
                         -
                     {% endif %}
                 </td>
             </tr>
             {% empty %}
-            <tr><td colspan="10">Sem registros.</td></tr>
+            <tr><td colspan="10" style="padding: 20px; color: #999;">Sem registros acadêmicos encontrados.</td></tr>
             {% endfor %}
         </tbody>
     </table>
 
     <div class="footer">
-        Documento gerado automaticamente em {{ generated_at }}.<br>
+        Documento gerado digitalmente em {{ generated_at }} via Sistema Lumis.<br>
         A autenticidade deste documento pode ser verificada na secretaria da escola.
     </div>
 </body>

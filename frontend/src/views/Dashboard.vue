@@ -30,8 +30,8 @@ const loadDashboard = async () => {
             labels: segments,
             datasets: [{
                 data: totals,
-                backgroundColor: ['#42A5F5', '#66BB6A', '#FFA726', '#AB47BC'],
-                hoverBackgroundColor: ['#64B5F6', '#81C784', '#FFB74D', '#BA68C8']
+                backgroundColor: ['#c084fc', '#a855f7', '#9333ea', '#7e22ce'],
+                hoverBackgroundColor: ['#a855f7', '#9333ea', '#7e22ce', '#581c87']
             }]
         };
 
@@ -43,7 +43,7 @@ const loadDashboard = async () => {
             labels: subjects,
             datasets: [{
                 label: 'Média Geral da Escola',
-                backgroundColor: '#2f4860',
+                backgroundColor: '#581c87',
                 data: averages
             }]
         };
@@ -59,67 +59,68 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="grid">
-        <div class="col-12 lg:col-6 xl:col-3">
+    <div class="grid grid-cols-12 gap-6">
+        <div class="col-span-12 lg:col-span-6 xl:col-span-3">
             <div class="card mb-0">
-                <div class="flex justify-content-between mb-3">
+                <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">Total Alunos</span>
                         <div class="text-900 font-medium text-xl">{{ dashboardData.cards.students }}</div>
                     </div>
-                    <div class="flex align-items-center justify-content-center bg-blue-100 border-round" style="width: 2.5rem; height: 2.5rem">
-                        <i class="pi pi-users text-blue-500 text-xl"></i>
+                    <div class="flex items-center justify-center bg-purple-50 dark:bg-purple-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
+                        <i class="pi pi-users text-purple-500 text-xl"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-12 lg:col-6 xl:col-3">
+        <div class="col-span-12 lg:col-span-6 xl:col-span-3">
             <div class="card mb-0">
-                <div class="flex justify-content-between mb-3">
+                <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">Turmas Ativas</span>
                         <div class="text-900 font-medium text-xl">{{ dashboardData.cards.classes }}</div>
                     </div>
-                    <div class="flex align-items-center justify-content-center bg-orange-100 border-round" style="width: 2.5rem; height: 2.5rem">
+                    <div class="flex items-center justify-center bg-purple-50 dark:bg-purple-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
                         <i class="pi pi-map-marker text-orange-500 text-xl"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-12 lg:col-6 xl:col-3">
+        <div class="col-span-12 lg:col-span-6 xl:col-span-3">
             <div class="card mb-0">
-                <div class="flex justify-content-between mb-3">
+                <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">Professores</span>
                         <div class="text-900 font-medium text-xl">{{ dashboardData.cards.teachers }}</div>
                     </div>
-                    <div class="flex align-items-center justify-content-center bg-cyan-100 border-round" style="width: 2.5rem; height: 2.5rem">
+                    <div class="flex items-center justify-center bg-purple-50 dark:bg-purple-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
                         <i class="pi pi-id-card text-cyan-500 text-xl"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-12 lg:col-6 xl:col-3">
+        <div class="col-span-12 lg:col-span-6 xl:col-span-3">
             <div class="card mb-0">
-                <div class="flex justify-content-between mb-3">
+                <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">Alunos em Risco</span>
                         <div class="text-900 font-medium text-xl">{{ dashboardData.cards.risk }}</div>
                     </div>
-                    <div class="flex align-items-center justify-content-center bg-red-100 border-round" style="width: 2.5rem; height: 2.5rem">
+                    <div class="flex items-center justify-center bg-purple-50 dark:bg-purple-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
                         <i class="pi pi-exclamation-circle text-red-500 text-xl"></i>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-12 xl:col-6">
+        <div class="col-span-12 xl:col-span-4">
             <div class="card">
                 <h5>Distribuição por Segmento</h5>
                 <Chart type="pie" :data="pieData" :options="chartOptions" class="w-full md:w-30rem" v-if="pieData" />
             </div>
         </div>
-        <div class="col-12 xl:col-6">
+        
+        <div class="col-span-12 xl:col-span-8">
             <div class="card">
                 <h5>Desempenho por Matéria (Top 5)</h5>
                 <Chart type="bar" :data="barData" :options="chartOptions" v-if="barData" />

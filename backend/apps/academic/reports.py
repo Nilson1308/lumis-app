@@ -1,3 +1,4 @@
+import os
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.conf import settings
@@ -88,6 +89,14 @@ def generate_student_report_card(request, enrollment_id):
         
         report_data.append(row)
 
+    logo_path = os.path.join(settings.BASE_DIR, 'apps', 'core', 'static', 'images', 'logo_st.png')
+
+    if os.path.exists(logo_path):
+        from pathlib import Path
+        logo_url = Path(logo_path).as_uri()
+    else:
+        logo_url = None
+
     context = {
         'student': student,
         'classroom': classroom,
@@ -95,6 +104,7 @@ def generate_student_report_card(request, enrollment_id):
         'periods_header': all_periods,
         'is_partial': selected_period is not None,
         'generated_at': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'logo_url': request.build_absolute_uri(settings.STATIC_URL + 'images/logo_st.png')
     }
 
     if HTML is None:

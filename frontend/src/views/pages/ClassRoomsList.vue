@@ -142,7 +142,7 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Nova Turma" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Nova Turma" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
             </Toolbar>
@@ -181,8 +181,8 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editClassRoom(slotProps.data)" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDeleteClassRoom(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editClassRoom(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteClassRoom(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
@@ -223,7 +223,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span v-if="classRoom">Tem certeza que deseja excluir <b>{{ classRoom.name }}</b>?</span>
                 </div>

@@ -182,11 +182,11 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Novo Aluno" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Novo Aluno" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
                 <template v-slot:end>
-                    <Button label="Exportar CSV" icon="pi pi-upload" class="p-button-help" @click="exportCSV" />
+                    <Button label="Exportar CSV" icon="pi pi-upload" @click="exportCSV" />
                 </template>
             </Toolbar>
 
@@ -229,13 +229,13 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editStudent(slotProps.data)" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDeleteStudent(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editStudent(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteStudent(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="studentDialog" :style="{ width: '450px' }" header="Product Details" :modal="true">
+            <Dialog v-model:visible="studentDialog" :style="{ width: '450px' }" header="Detalhes do(a) Aluno(a)" :modal="true">
                 <div class="flex flex-col gap-6">
                     <div>
                         <label for="name" class="block font-bold mb-3">Nome Completo</label>
@@ -260,7 +260,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span v-if="student">Tem certeza que deseja excluir <b>{{ student.name }}</b>?</span>
                 </div>

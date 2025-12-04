@@ -41,7 +41,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="col-12">
+    <div class="mb-4">
         <div class="card mb-0">
             <div class="flex justify-content-between mb-3">
                 <span class="block text-500 font-medium mb-3">Portal do Professor</span>
@@ -50,42 +50,44 @@ onMounted(() => {
         </div>
     </div>
 
-    <div v-if="loading" class="col-12">
+    <div v-if="loading" class="mb-4">
         <div class="card">Carregando suas turmas...</div>
     </div>
 
-    <div v-else-if="myClasses.length === 0" class="col-12">
+    <div v-else-if="myClasses.length === 0" class="mb-4">
         <div class="card text-center">
             <h3>Você não possui turmas atribuídas.</h3>
             <p>Entre em contato com a coordenação.</p>
         </div>
     </div>
 
-    <div v-else class="col-12 md:col-6 lg:col-4" v-for="item in myClasses" :key="item.id">
-        <div class="surface-card shadow-2 p-3 border-round hover:surface-100 transition-duration-200 flex flex-column h-full">
-            <div class="flex justify-content-between mb-3 cursor-pointer" @click="openClassroom(item)">
-                <div>
-                    <span class="block text-500 font-medium mb-3">{{ item.subject_name }}</span>
-                    <div class="text-900 font-medium text-xl">{{ item.classroom_name }}</div>
+    <div v-else class="grid grid-cols-12 gap-6">
+        <div class="col-span-12 lg:col-span-4 xl:col-span-4" v-for="item in myClasses" :key="item.id">
+            <div class="card" @click="openClassroom(item)">
+                <div class="flex justify-between mb-3">
+                    <div>
+                        <span class="block text-500 font-medium mb-3">{{ item.subject_name }}</span>
+                        <div class="text-900 font-medium text-xl">{{ item.classroom_name }}</div>
+                    </div>
+                    <div class="flex items-center justify-center bg-purple-50 dark:bg-purple-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
+                        <i class="pi pi-book text-purple-500 text-xl"></i>
+                    </div>
                 </div>
-                <div class="flex align-items-center justify-content-center bg-blue-100 border-round" style="width: 2.5rem; height: 2.5rem">
-                    <i class="pi pi-book text-blue-500 text-xl"></i>
+                <Divider/>
+                <div class="mt-auto flex gap-2">
+                    <Button 
+                        label="Notas" 
+                        icon="pi pi-pencil" 
+                        class="p-button-outlined flex-1" 
+                        @click="openClassroom(item)" 
+                    />
+                    <Button 
+                        label="Chamada" 
+                        icon="pi pi-calendar-plus" 
+                        class="p-button-outlined flex-1" 
+                        @click="openAttendance(item)" 
+                    />
                 </div>
-            </div>
-            
-            <div class="mt-auto flex gap-2">
-                <Button 
-                    label="Notas" 
-                    icon="pi pi-pencil" 
-                    class="p-button-outlined flex-1" 
-                    @click="openClassroom(item)" 
-                />
-                <Button 
-                    label="Chamada" 
-                    icon="pi pi-calendar-plus" 
-                    class="p-button-outlined p-button-secondary flex-1" 
-                    @click="openAttendance(item)" 
-                />
             </div>
         </div>
     </div>

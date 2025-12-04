@@ -122,7 +122,7 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Nova Observação" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Nova Observação" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
             </Toolbar>
@@ -148,16 +148,16 @@ onMounted(() => {
 
                 <Column header="Ações">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editObservation(slotProps.data)" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDelete(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editObservation(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
 
             <Dialog v-model:visible="observationDialog" :style="{ width: '600px' }" header="Ficha de Observação" :modal="true" class="p-fluid">
                 
-                <div class="field">
-                    <label class="font-bold">Aula Observada (Professor / Turma)</label>
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Aula Observada (Professor / Turma)</label>
                     <Dropdown 
                         v-model="observation.assignment" 
                         :options="assignments" 
@@ -167,46 +167,47 @@ onMounted(() => {
                         filter
                         autofocus
                         :class="{ 'p-invalid': submitted && !observation.assignment }"
+                        fluid
                     />
                     <small class="p-error" v-if="submitted && !observation.assignment">Obrigatório.</small>
                 </div>
 
-                <div class="field">
-                    <label class="font-bold">Data</label>
-                    <Calendar v-model="observation.date" dateFormat="dd/mm/yy" showIcon />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Data</label>
+                    <Calendar v-model="observation.date" dateFormat="dd/mm/yy" showIcon fluid />
                 </div>
 
-                <div class="formgrid grid">
-                    <div class="field col-6">
+                <div class="grid grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-6">
                         <label>Pontualidade</label>
                         <Rating v-model="observation.pontuality" :cancel="false" />
                     </div>
-                    <div class="field col-6">
+                    <div class="col-span-12 xl:col-span-6">
                         <label>Domínio de Classe</label>
                         <Rating v-model="observation.class_control" :cancel="false" />
                     </div>
-                    <div class="field col-6">
+                    <div class="col-span-12 xl:col-span-6">
                         <label>Planejamento</label>
                         <Rating v-model="observation.planning" :cancel="false" />
                     </div>
-                    <div class="field col-6">
+                    <div class="col-span-12 xl:col-span-6">
                         <label>Engajamento dos Alunos</label>
                         <Rating v-model="observation.student_engagement" :cancel="false" />
                     </div>
                 </div>
 
-                <div class="field mt-3">
-                    <label class="font-bold">Pontos Fortes</label>
-                    <Textarea v-model="observation.strong_points" rows="3" autoResize />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Pontos Fortes</label>
+                    <Textarea v-model="observation.strong_points" rows="3" autoResize fluid />
                 </div>
 
-                <div class="field">
-                    <label class="font-bold">Pontos a Melhorar</label>
-                    <Textarea v-model="observation.points_to_improve" rows="3" autoResize />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Pontos a Melhorar</label>
+                    <Textarea v-model="observation.points_to_improve" rows="3" autoResize fluid />
                 </div>
 
-                <div class="field-checkbox">
-                    <Checkbox id="feedback" v-model="observation.feedback_given" :binary="true" />
+                <div class="mb-2">
+                    <Checkbox id="feedback" v-model="observation.feedback_given" :binary="true" class="mr-2" />
                     <label for="feedback">O feedback já foi passado ao professor?</label>
                 </div>
 
@@ -217,7 +218,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Apagar este registo de observação?</span>
                 </div>

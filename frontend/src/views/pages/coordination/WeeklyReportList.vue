@@ -110,7 +110,7 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Novo Relatório Semanal" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Novo Relatório Semanal" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
             </Toolbar>
@@ -134,34 +134,34 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editReport(slotProps.data)" v-tooltip.top="'Ver/Editar'" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDelete(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editReport(slotProps.data)" v-tooltip.top="'Ver/Editar'" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
 
             <Dialog v-model:visible="reportDialog" :style="{ width: '700px' }" header="Relatório Semanal" :modal="true" class="p-fluid">
                 
-                <div class="formgrid grid">
-                    <div class="field col-6">
-                        <label class="font-bold">Data Início</label>
-                        <Calendar v-model="report.start_date" dateFormat="dd/mm/yy" showIcon />
+                <div class="grid grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="mb-2 block font-bold">Data Início</label>
+                        <Calendar v-model="report.start_date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
-                    <div class="field col-6">
-                        <label class="font-bold">Data Fim</label>
-                        <Calendar v-model="report.end_date" dateFormat="dd/mm/yy" showIcon />
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="mb-2 block font-bold">Data Fim</label>
+                        <Calendar v-model="report.end_date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
                 </div>
 
-                <div class="field">
-                    <label class="font-bold">Resumo das Atividades</label>
-                    <Textarea v-model="report.description" rows="8" autoResize placeholder="O que foi realizado nesta semana?" :class="{ 'p-invalid': submitted && !report.description }" />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Resumo das Atividades</label>
+                    <Textarea v-model="report.description" rows="8" autoResize placeholder="O que foi realizado nesta semana?" :class="{ 'p-invalid': submitted && !report.description }" fluid />
                     <small class="p-error" v-if="submitted && !report.description">Obrigatório.</small>
                 </div>
 
-                <div class="field">
-                    <label class="font-bold text-red-500">Pendências / Pontos de Atenção</label>
-                    <Textarea v-model="report.pending_issues" rows="4" autoResize placeholder="Algum problema não resolvido? Aluno crítico?" />
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold text-red-500">Pendências / Pontos de Atenção</label>
+                    <Textarea v-model="report.pending_issues" rows="4" autoResize placeholder="Algum problema não resolvido? Aluno crítico?" fluid />
                 </div>
 
                 <template #footer>
@@ -171,7 +171,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Excluir este relatório?</span>
                 </div>

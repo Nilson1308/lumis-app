@@ -182,7 +182,7 @@ onMounted(() => {
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
-                        <Button label="Nova Atribuição" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Nova Atribuição" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
             </Toolbar>
@@ -199,8 +199,8 @@ onMounted(() => {
                 responsiveLayout="scroll"
             >
                 <template #header>
-                    <div class="flex flex-column gap-3">
-                        <div class="flex justify-content-between align-items-center">
+                    <div class="flex flex-col gap-3">
+                        <div class="flex flex-wrap gap-2 items-center justify-between">
                             <h4 class="m-0">Grade de Aulas</h4>
                             <IconField>
                                 <InputIcon>
@@ -210,7 +210,7 @@ onMounted(() => {
                             </IconField>
                         </div>
                         
-                        <div class="flex flex-column md:flex-row gap-3">
+                        <div class="flex flex-col md:flex-row gap-3">
                             <Dropdown 
                                 v-model="filterTeacher" 
                                 :options="teachers" 
@@ -254,8 +254,8 @@ onMounted(() => {
                             <Button 
                                 type="button" 
                                 icon="pi pi-filter-slash" 
-                                label="Limpar" 
-                                class="p-button-outlined p-button-secondary w-full md:w-auto" 
+                                label=" " 
+                                class="p-button w-full md:w-auto" 
                                 @click="clearFilters" 
                                 v-tooltip.top="'Limpar todos os filtros'"
                             />
@@ -272,15 +272,15 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editAssignment(slotProps.data)" />
-                        <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDelete(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editAssignment(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
 
             <Dialog v-model:visible="assignmentDialog" :header="assignment.id ? 'Editar Atribuição' : 'Nova Atribuição'" :modal="true" :style="{ width: '450px' }" class="p-fluid">
                 
-                <div class="field">
+                <div class="mb-2">
                     <label class="mb-2 block font-bold">Professor</label>
                     <Dropdown 
                         v-model="assignment.teacher" 
@@ -290,6 +290,7 @@ onMounted(() => {
                         placeholder="Selecione o Professor" 
                         filter
                         :class="{ 'p-invalid': submitted && !assignment.teacher }"
+                        fluid
                     >
                         <template #option="slotProps">
                             {{ slotProps.option.first_name ? slotProps.option.first_name + ' ' + slotProps.option.last_name : slotProps.option.username }}
@@ -304,7 +305,7 @@ onMounted(() => {
                     <small class="p-error" v-if="submitted && !assignment.teacher">Professor é obrigatório.</small>
                 </div>
 
-                <div class="field">
+                <div class="mb-2">
                     <label class="mb-2 block font-bold">Matéria</label>
                     <Dropdown 
                         v-model="assignment.subject" 
@@ -314,11 +315,12 @@ onMounted(() => {
                         placeholder="Selecione a Matéria" 
                         filter
                         :class="{ 'p-invalid': submitted && !assignment.subject }"
+                        fluid
                     />
                     <small class="p-error" v-if="submitted && !assignment.subject">Matéria é obrigatória.</small>
                 </div>
 
-                <div class="field">
+                <div class="mb-2">
                     <label class="mb-2 block font-bold">Turma</label>
                     <Dropdown 
                         v-model="assignment.classroom" 
@@ -328,6 +330,7 @@ onMounted(() => {
                         placeholder="Selecione a Turma" 
                         filter
                         :class="{ 'p-invalid': submitted && !assignment.classroom }"
+                        fluid
                     />
                     <small class="p-error" v-if="submitted && !assignment.classroom">Turma é obrigatória.</small>
                 </div>
@@ -339,7 +342,7 @@ onMounted(() => {
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" header="Remover Atribuição" :modal="true" :style="{ width: '450px' }">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Tem certeza que deseja remover esta aula?</span>
                 </div>

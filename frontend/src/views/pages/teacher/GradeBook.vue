@@ -151,8 +151,8 @@ onMounted(() => {
         <div class="card">
             <Toast />
 
-            <div class="flex flex-column md:flex-row justify-content-between align-items-center mb-4" v-if="assignment">
-                <div class="flex align-items-center mb-3 md:mb-0">
+            <div class="flex flex-column md:flex-row justify-between items-center mb-4" v-if="assignment">
+                <div class="flex items-center mb-3 md:mb-0">
                     <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="goBack" />
                     <div>
                         <span class="block text-xl font-bold">{{ assignment.subject_name }}</span>
@@ -160,7 +160,7 @@ onMounted(() => {
                     </div>
                 </div>
                 
-                <div class="flex align-items-center gap-3">
+                <div class="flex items-center gap-3">
                     <span class="font-bold">Período:</span>
                     <Dropdown 
                         v-model="selectedPeriod" 

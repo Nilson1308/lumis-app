@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Camada_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 512 512">
+  <!-- Generator: Adobe Illustrator 29.6.1, SVG Export Plug-In . SVG Version: 2.1.1 Build 9)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #9333ea;
+      }
+    </style>
+  </defs>
+  <path class="st0" d="M460.8,0H51.2C22.9,0,0,22.9,0,51.2v409.6c0,28.3,22.9,51.2,51.2,51.2h409.6c28.3,0,51.2-22.9,51.2-51.2V51.2c0-28.3-22.9-51.2-51.2-51.2ZM256,512C256,370.6,141.4,256,0,256,141.4,256,256,141.4,256,0c0,141.4,114.6,256,256,256-141.4,0-256,114.6-256,256Z"/>
+</svg>
