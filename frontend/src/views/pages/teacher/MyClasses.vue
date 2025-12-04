@@ -63,7 +63,7 @@ onMounted(() => {
 
     <div v-else class="grid grid-cols-12 gap-6">
         <div class="col-span-12 lg:col-span-4 xl:col-span-4" v-for="item in myClasses" :key="item.id">
-            <div class="card" @click="openClassroom(item)">
+            <div class="card">
                 <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">{{ item.subject_name }}</span>
