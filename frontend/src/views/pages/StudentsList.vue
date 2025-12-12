@@ -1,143 +1,139 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
 const toast = useToast();
-const dt = ref(); // Referência para a DataTable
 
-// --- ESTADOS ---
+const FilterMatchMode = {
+    STARTS_WITH: 'startsWith',
+    CONTAINS: 'contains',
+    NOT_CONTAINS: 'notContains',
+    ENDS_WITH: 'endsWith',
+    EQUALS: 'equals',
+    NOT_EQUALS: 'notEquals',
+    IN: 'in',
+    LESS_THAN: 'lt',
+    LESS_THAN_OR_EQUAL_TO: 'lte',
+    GREATER_THAN: 'gt',
+    GREATER_THAN_OR_EQUAL_TO: 'gte',
+    BETWEEN: 'between',
+    DATE_IS: 'dateIs',
+    DATE_IS_NOT: 'dateIsNot',
+    DATE_BEFORE: 'dateBefore',
+    DATE_AFTER: 'dateAfter'
+};
+
 const students = ref([]);
+const guardians = ref([]); // Lista para o Dropdown
 const student = ref({});
-const loading = ref(true);
 const studentDialog = ref(false);
-const deleteDialog = ref(false);
+const deleteStudentDialog = ref(false);
+const loading = ref(true);
 const submitted = ref(false);
 
-// --- ESTADOS DA PAGINAÇÃO E FILTRO ---
-const totalRecords = ref(0); // Total que vem do backend (count)
-const lazyParams = ref({
-    first: 0,
-    rows: 10,
-    page: 1,
-    sortField: null,
-    sortOrder: null,
-    filters: {}
+const filters = ref({
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
 });
-const globalFilter = ref(''); // Campo de busca
 
-// --- API: LISTAR (COM PAGINAÇÃO E BUSCA) ---
-const fetchStudents = async () => {
+// --- CARREGAR DADOS ---
+const loadData = async () => {
     loading.value = true;
     try {
-        // Calcula a página atual: (0 / 10) + 1 = Pag 1; (10 / 10) + 1 = Pag 2
-        const pageNumber = (lazyParams.value.first / lazyParams.value.rows) + 1;
-        
-        // Monta a URL com parâmetros
-        const params = {
-            page: pageNumber,
-            page_size: lazyParams.value.rows,
-            search: globalFilter.value // O Django já espera ?search=
-        };
+        // Busca Alunos
+        const resStudents = await api.get('students/?page_size=100');
+        students.value = resStudents.data.results;
 
-        const response = await api.get('students/', { params });
-        
-        // DRF retorna: { count: 50, next: "...", previous: "...", results: [...] }
-        students.value = response.data.results;
-        totalRecords.value = response.data.count; // Atualiza o totalizador do rodapé
-        
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados', life: 3000 });
-        console.error(error);
+        // Busca Responsáveis (para o vínculo)
+        const resGuardians = await api.get('guardians/?page_size=100');
+        guardians.value = resGuardians.data.results;
+    } catch (e) {
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados' });
     } finally {
         loading.value = false;
     }
 };
 
-// Evento disparado ao mudar de página ou ordenar
-const onPage = (event) => {
-    lazyParams.value = event;
-    fetchStudents();
-};
+// --- BUSCA DE CEP (VIACEP) ---
+const searchCep = async () => {
+    // Remove tudo que não é número (ex: traço)
+    const cep = student.value.zip_code ? student.value.zip_code.replace(/\D/g, '') : '';
 
-// Evento de Busca (com delay para não chamar API a cada letra)
-let timeout = null;
-const onSearch = () => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => {
-        lazyParams.value.first = 0; // Volta para primeira página
-        fetchStudents();
-    }, 500); // Espera 500ms após parar de digitar
-};
+    if (cep.length !== 8) {
+        return; // Não faz nada se o CEP estiver incompleto
+    }
 
-// --- API: EXPORTAR CSV (TODOS OS DADOS) ---
-const exportCSV = async () => {
     try {
-        loading.value = true;
-        // Pede uma lista gigante para exportação (limitado a 1000 por segurança ou criar endpoint específico)
-        const response = await api.get('students/', { params: { page_size: 1000, search: globalFilter.value } });
-        
-        // Usa a função nativa do PrimeVue para exportar, mas injetando os dados carregados
-        // Precisamos formatar os dados para ficarem bonitos no Excel
-        const dataToExport = response.data.results.map(s => ({
-            ...s,
-            created_at: new Date(s.created_at).toLocaleDateString('pt-BR')
-        }));
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
 
-        dt.value.exportCSV(null, dataToExport);
+        if (data.erro) {
+            toast.add({ severity: 'warn', summary: 'Atenção', detail: 'CEP não encontrado.', life: 3000 });
+            return;
+        }
+
+        // Preenche os campos automaticamente
+        student.value.street = data.logradouro;
+        student.value.neighborhood = data.bairro;
+        student.value.city = data.localidade;
+        student.value.state = data.uf;
         
+        // Foca no campo número (opcional, mas boa UX)
+        // document.getElementById('number')?.focus(); 
+
+        toast.add({ severity: 'info', summary: 'Endereço', detail: 'Endereço carregado com sucesso!', life: 3000 });
+
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao exportar', life: 3000 });
-    } finally {
-        loading.value = false;
+        console.error("Erro ao buscar CEP:", error);
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao buscar CEP. Verifique sua conexão.', life: 3000 });
     }
 };
 
-// --- AÇÕES DE INTERFACE ---
+// --- AÇÕES ---
 const openNew = () => {
-    student.value = {};
+    student.value = {
+        nationality: 'Brasileira',
+        city: 'Mogi das Cruzes',
+        state: 'SP',
+        guardians: [] // Array de IDs
+    };
     submitted.value = false;
     studentDialog.value = true;
 };
 
-const hideDialog = () => {
-    studentDialog.value = false;
-    submitted.value = false;
-};
-
 const editStudent = (prod) => {
-    // Clona o objeto e ajusta a data para o Calendar entender (objeto Date JS)
     student.value = { ...prod };
+    
+    // Converter data string YYYY-MM-DD para Objeto Date (para o Calendar funcionar)
     if (student.value.birth_date) {
-        // Converte string '2025-01-01' para Date Object, corrigindo fuso horário
-        const [year, month, day] = student.value.birth_date.split('-');
-        student.value.birth_date = new Date(year, month - 1, day);
+        // Truque para ajustar fuso horário
+        const parts = student.value.birth_date.split('-');
+        student.value.birth_date = new Date(parts[0], parts[1] - 1, parts[2]);
     }
+
+    // Garantir que guardians seja um array (o backend pode mandar null se vazio)
+    if (!student.value.guardians) student.value.guardians = [];
+    
     studentDialog.value = true;
 };
 
 const confirmDeleteStudent = (prod) => {
     student.value = prod;
-    deleteDialog.value = true;
+    deleteStudentDialog.value = true;
 };
 
-// --- UTILITÁRIO: FORMATAR DATA PARA DJANGO (YYYY-MM-DD) ---
-const formatDateToAPI = (dateObj) => {
-    if (!dateObj) return null;
-    const offset = dateObj.getTimezoneOffset();
-    const date = new Date(dateObj.getTime() - (offset*60*1000));
-    return date.toISOString().split('T')[0];
-};
-
-// --- API: SALVAR ---
+// --- SALVAR ---
 const saveStudent = async () => {
     submitted.value = true;
 
-    if (student.value.name && student.value.name.trim() && student.value.registration_number) {
-        // Prepara objeto para envio (formata data)
+    if (student.value.name && student.value.registration_number) {
+        // Clona e prepara payload
         const payload = { ...student.value };
+        
+        // Formata Data para API (YYYY-MM-DD)
         if (payload.birth_date instanceof Date) {
-            payload.birth_date = formatDateToAPI(payload.birth_date);
+            payload.birth_date = payload.birth_date.toISOString().split('T')[0];
         }
 
         try {
@@ -149,10 +145,10 @@ const saveStudent = async () => {
                 toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno criado', life: 3000 });
             }
             studentDialog.value = false;
-            student.value = {};
-            fetchStudents(); 
+            loadData();
         } catch (error) {
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Verifique os dados.', life: 3000 });
+            console.error(error);
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar aluno.', life: 3000 });
         }
     }
 };
@@ -160,17 +156,17 @@ const saveStudent = async () => {
 const deleteStudent = async () => {
     try {
         await api.delete(`students/${student.value.id}/`);
-        deleteDialog.value = false;
+        deleteStudentDialog.value = false;
         student.value = {};
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno excluído', life: 3000 });
-        fetchStudents();
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno removido', life: 3000 });
+        loadData();
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao remover', life: 3000 });
     }
 };
 
 onMounted(() => {
-    fetchStudents();
+    loadData();
 });
 </script>
 
@@ -178,56 +174,39 @@ onMounted(() => {
     <div class="col-12">
         <div class="card">
             <Toast />
-            
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2">
                         <Button label="Novo Aluno" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
                 </template>
-                <template v-slot:end>
-                    <Button label="Exportar CSV" icon="pi pi-upload" @click="exportCSV" />
-                </template>
             </Toolbar>
 
-            <DataTable 
-                ref="dt" 
-                :value="students" 
-                :lazy="true" 
-                :paginator="true" 
-                :rows="10" 
-                :totalRecords="totalRecords" 
-                :loading="loading" 
-                @page="onPage" 
-                responsiveLayout="scroll"
-            >
-
+            <DataTable :value="students" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10">
                 <template #header>
                     <div class="flex flex-wrap gap-2 items-center justify-between">
-                        <h4 class="m-0">Gerenciar Alunos</h4>
+                        <h4 class="m-0">Listagem de Alunos</h4>
                         <IconField>
                             <InputIcon>
                                 <i class="pi pi-search" />
                             </InputIcon>
-                            <InputText v-model="globalFilter" placeholder="Buscar..." @input="onSearch" />
+                            <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
                         </IconField>
                     </div>
                 </template>
-
-                <Column field="registration_number" header="Matrícula" style="width: 15%"></Column>
-                <Column field="name" header="Nome" style="width: 40%"></Column>
-                <Column field="birth_date" header="Nascimento" style="width: 15%">
-                        <template #body="slotProps">
-                        {{ slotProps.data.birth_date ? new Date(slotProps.data.birth_date + 'T12:00:00').toLocaleDateString('pt-BR') : '-' }}
-                    </template>
-                </Column>
-                <Column field="created_at" header="Cadastro" style="width: 15%">
-                    <template #body="slotProps">
-                        {{ new Date(slotProps.data.created_at).toLocaleDateString('pt-BR') }}
-                    </template>
-                </Column>
                 
-                <Column header="Ações" style="width: 15%">
+                <Column field="registration_number" header="Matrícula" sortable></Column>
+                <Column field="name" header="Nome" sortable></Column>
+                <Column field="birth_date" header="Nascimento">
+                    <template #body="slotProps">
+                        <span v-if="slotProps.data.birth_date">
+                            {{ new Date(slotProps.data.birth_date + 'T00:00:00').toLocaleDateString('pt-BR') }}
+                        </span>
+                    </template>
+                </Column>
+                <Column field="emergency_contact" header="Contato Emergência"></Column>
+                
+                <Column header="Ações">
                     <template #body="slotProps">
                         <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editStudent(slotProps.data)" />
                         <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteStudent(slotProps.data)" />
@@ -235,37 +214,128 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="studentDialog" :style="{ width: '450px' }" header="Detalhes do(a) Aluno(a)" :modal="true">
-                <div class="flex flex-col gap-6">
-                    <div>
-                        <label for="name" class="block font-bold mb-3">Nome Completo</label>
-                        <InputText id="name" v-model.trim="student.name" required="true" autofocus :class="{ 'p-invalid': submitted && !student.name }"  fluid />
-                        <small class="p-error" v-if="submitted && !student.name">Nome é obrigatório.</small>
-                    </div>
-                    <div>
-                        <label for="reg" class="block font-bold mb-3">Matrícula</label>
-                        <InputText id="reg" v-model.trim="student.registration_number" required="true" :class="{ 'p-invalid': submitted && !student.registration_number }"  fluid />
-                        <small class="p-error" v-if="submitted && !student.registration_number">Matrícula é obrigatória.</small>
-                    </div>
-                    <div>
-                        <label for="birth" class="block font-bold mb-3">Data de Nascimento</label>
-                        <Calendar id="birth" v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true"  fluid />
-                    </div>
-                </div>
+            <Dialog v-model:visible="studentDialog" :style="{ width: '800px' }" header="Prontuário do Aluno" :modal="true" class="p-fluid">
+                
+                <TabView>
+                    
+                    <TabPanel header="Dados Pessoais">
+                        <div class="mb-2">
+                            <label for="name" class="block font-bold mb-3">Nome Completo</label>
+                            <InputText id="name" v-model.trim="student.name" required="true" autofocus :class="{ 'p-invalid': submitted && !student.name }" fluid />
+                            <small class="p-error" v-if="submitted && !student.name">O nome é obrigatório.</small>
+                        </div>
+
+                        <div class="grid grid-cols-12 gap-4 mb-2">
+                            <div class="col-span-12 xl:col-span-6">
+                                <label class="block font-bold mb-3">Matrícula</label>
+                                <InputText v-model.trim="student.registration_number" required="true" :class="{ 'p-invalid': submitted && !student.registration_number }" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-6">
+                                <label class="block font-bold mb-3">Data de Nascimento</label>
+                                <Calendar v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-4">
+                                <label class="block font-bold mb-3">Gênero</label>
+                                <Dropdown v-model="student.gender" :options="[{label:'Masculino', value:'M'}, {label:'Feminino', value:'F'}]" optionLabel="label" optionValue="value" placeholder="Selecione" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-4">
+                                <label class="block font-bold mb-3">CPF</label>
+                                <InputMask v-model="student.cpf" mask="999.999.999-99" placeholder="000.000.000-00" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-4">
+                                <label class="block font-bold mb-3">RG</label>
+                                <InputText v-model="student.rg" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-12">
+                                <label class="block font-bold mb-3">Nacionalidade</label>
+                                <InputText v-model="student.nationality" fluid />
+                            </div>
+                        </div>
+                    </TabPanel>
+
+                    <TabPanel header="Endereço">
+                        <div class="grid grid-cols-12 gap-4 mb-2">
+                            <div class="col-span-12 xl:col-span-4">
+                                <label class="block font-bold mb-3">CEP <i class="pi pi-search text-primary ml-1" v-tooltip="'Digite o CEP para buscar'"></i></label>
+                                <InputMask v-model="student.zip_code" mask="99999-999" @blur="searchCep" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-8">
+                                <label class="block font-bold mb-3">Logradouro (Rua/Av)</label>
+                                <InputText v-model="student.street" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-4">
+                                <label class="block font-bold mb-3">Número</label>
+                                <InputText id="number" v-model="student.number" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-8">
+                                <label class="block font-bold mb-3">Complemento</label>
+                                <InputText v-model="student.complement" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-5">
+                                <label class="block font-bold mb-3">Bairro</label>
+                                <InputText v-model="student.neighborhood" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-5">
+                                <label class="block font-bold mb-3">Cidade</label>
+                                <InputText v-model="student.city" fluid />
+                            </div>
+                            <div class="col-span-12 xl:col-span-2">
+                                <label class="block font-bold mb-3">UF</label>
+                                <InputText v-model="student.state" fluid />
+                            </div>
+                        </div>
+                    </TabPanel>
+
+                    <TabPanel header="Saúde & Emergência">
+                        <div class="mb-2">
+                            <label class="block font-bold mb-3 text-red-500">Alergias</label>
+                            <Textarea v-model="student.allergies" rows="3" autoResize placeholder="Lista de alergias..." fluid />
+                        </div>
+                        <div class="mb-2">
+                            <label class="block font-bold mb-3">Medicamentos Contínuos</label>
+                            <Textarea v-model="student.medications" rows="3" autoResize fluid />
+                        </div>
+                        <div class="mb-2">
+                            <label class="block font-bold mb-3">Contato de Emergência (Nome e Telefone)</label>
+                            <InputText v-model="student.emergency_contact" placeholder="Ex: Avó Maria - (11) 99999-9999" fluid />
+                        </div>
+                    </TabPanel>
+
+                    <TabPanel header="Responsáveis (Pais)">
+                        <div class="mb-2">
+                            <label class="block font-bold mb-3">Vincular Responsáveis Cadastrados</label>
+                            <MultiSelect 
+                                v-model="student.guardians" 
+                                :options="guardians" 
+                                optionLabel="name" 
+                                optionValue="id" 
+                                placeholder="Selecione os pais/responsáveis" 
+                                display="chip" 
+                                class="w-full"
+                                filter
+                                fluid
+                            />
+                            <small class="block mt-2">
+                                Não encontrou? <router-link to="/academic/guardians">Cadastre o Responsável aqui</router-link> antes de vincular.
+                            </small>
+                        </div>
+                    </TabPanel>
+
+                </TabView>
 
                 <template #footer>
-                    <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
-                    <Button label="Salvar" icon="pi pi-check" class="p-button-text" @click="saveStudent" />
+                    <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="studentDialog = false" />
+                    <Button label="Salvar Prontuário" icon="pi pi-check" @click="saveStudent" />
                 </template>
             </Dialog>
 
-            <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-center justify-center">
+            <Dialog v-model:visible="deleteStudentDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
+                <div class="flex align-items-center justify-content-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
-                    <span v-if="student">Tem certeza que deseja excluir <b>{{ student.name }}</b>?</span>
+                    <span>Deseja remover este aluno?</span>
                 </div>
                 <template #footer>
-                    <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteDialog = false" />
+                    <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteStudentDialog = false" />
                     <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteStudent" />
                 </template>
             </Dialog>

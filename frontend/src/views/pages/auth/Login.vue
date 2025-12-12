@@ -16,7 +16,10 @@ const handleLogin = async () => {
     errorMessage.value = '';
 
     try {
-        await authStore.login(username.value, password.value);
+        await authStore.login({ 
+            username: username.value, 
+            password: password.value 
+        });
         router.push('/');
         
     } catch (error) {

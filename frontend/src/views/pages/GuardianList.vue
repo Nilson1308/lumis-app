@@ -1,0 +1,190 @@
+<script setup>
+import { ref, onMounted } from 'vue';
+import { useToast } from 'primevue/usetoast';
+import api from '@/service/api';
+
+// Definição manual para evitar erro de import do Vite
+const FilterMatchMode = {
+    CONTAINS: 'contains'
+};
+
+const toast = useToast();
+
+const guardians = ref([]);
+const guardian = ref({});
+const guardianDialog = ref(false);
+const deleteGuardianDialog = ref(false);
+const loading = ref(true);
+const submitted = ref(false);
+
+const filters = ref({
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+});
+
+// --- CARREGAR DADOS ---
+const loadData = async () => {
+    loading.value = true;
+    try {
+        const response = await api.get('guardians/?page_size=100');
+        guardians.value = response.data.results;
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar responsáveis' });
+    } finally {
+        loading.value = false;
+    }
+};
+
+// --- AÇÕES ---
+const openNew = () => {
+    guardian.value = {};
+    submitted.value = false;
+    guardianDialog.value = true;
+};
+
+const editGuardian = (item) => {
+    guardian.value = { ...item };
+    guardianDialog.value = true;
+};
+
+const confirmDeleteGuardian = (item) => {
+    guardian.value = item;
+    deleteGuardianDialog.value = true;
+};
+
+// --- SALVAR ---
+const saveGuardian = async () => {
+    submitted.value = true;
+
+    if (guardian.value.name && guardian.value.cpf && guardian.value.phone) {
+        try {
+            if (guardian.value.id) {
+                await api.put(`guardians/${guardian.value.id}/`, guardian.value);
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Responsável atualizado', life: 3000 });
+            } else {
+                await api.post('guardians/', guardian.value);
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Responsável cadastrado', life: 3000 });
+            }
+            guardianDialog.value = false;
+            loadData();
+        } catch (error) {
+            console.error(error);
+            // Tratamento simples para erro de CPF duplicado (comum)
+            if (error.response && error.response.data && error.response.data.cpf) {
+                toast.add({ severity: 'error', summary: 'Erro', detail: 'Este CPF já está cadastrado.', life: 3000 });
+            } else {
+                toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar.', life: 3000 });
+            }
+        }
+    }
+};
+
+const deleteGuardian = async () => {
+    try {
+        await api.delete(`guardians/${guardian.value.id}/`);
+        deleteGuardianDialog.value = false;
+        guardian.value = {};
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido com sucesso', life: 3000 });
+        loadData();
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao remover. Verifique se não há alunos vinculados.', life: 3000 });
+    }
+};
+
+onMounted(() => {
+    loadData();
+});
+</script>
+
+<template>
+    <div class="col-12">
+        <div class="card">
+            <Toast />
+            <Toolbar class="mb-4">
+                <template v-slot:start>
+                    <div class="my-2">
+                        <Button label="Novo Responsável" icon="pi pi-plus" class="mr-2" @click="openNew" />
+                    </div>
+                </template>
+            </Toolbar>
+
+            <DataTable :value="guardians" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10">
+                <template #header>
+                    <div class="flex flex-wrap gap-2 items-center justify-between">
+                        <h4 class="m-0">Cadastro de Pais e Responsáveis</h4>
+                        <IconField>
+                            <InputIcon>
+                                <i class="pi pi-search" />
+                            </InputIcon>
+                            <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
+                        </IconField>
+                    </div>
+                </template>
+                
+                <Column field="name" header="Nome" sortable></Column>
+                <Column field="cpf" header="CPF"></Column>
+                <Column field="phone" header="Celular"></Column>
+                <Column field="email" header="Email"></Column>
+                
+                <Column header="Ações">
+                    <template #body="slotProps">
+                        <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editGuardian(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteGuardian(slotProps.data)" />
+                    </template>
+                </Column>
+            </DataTable>
+
+            <Dialog v-model:visible="guardianDialog" :style="{ width: '500px' }" header="Dados do Responsável" :modal="true" class="p-fluid">
+                
+                <div class="mb-2">
+                    <label for="name" class="block font-bold mb-3">Nome Completo</label>
+                    <InputText id="name" v-model.trim="guardian.name" required="true" autofocus :class="{ 'p-invalid': submitted && !guardian.name }" fluid />
+                    <small class="p-error" v-if="submitted && !guardian.name">Nome é obrigatório.</small>
+                </div>
+
+                <div class="grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="block font-bold mb-3">CPF</label>
+                        <InputMask v-model="guardian.cpf" mask="999.999.999-99" placeholder="000.000.000-00" :class="{ 'p-invalid': submitted && !guardian.cpf }" fluid />
+                        <small class="p-error" v-if="submitted && !guardian.cpf">CPF obrigatório.</small>
+                    </div>
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="block font-bold mb-3">RG</label>
+                        <InputText v-model="guardian.rg" fluid />
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="block font-bold mb-3">Celular / WhatsApp</label>
+                    <InputMask v-model="guardian.phone" mask="(99) 99999-9999" placeholder="(11) 99999-9999" :class="{ 'p-invalid': submitted && !guardian.phone }" fluid />
+                    <small class="p-error" v-if="submitted && !guardian.phone">Telefone obrigatório.</small>
+                </div>
+
+                <div class="mb-2">
+                    <label class="block font-bold mb-3">Email (Login)</label>
+                    <InputText v-model="guardian.email" placeholder="exemplo@email.com" fluid />
+                </div>
+
+                <div class="mb-2">
+                    <label class="block font-bold mb-3">Profissão</label>
+                    <InputText v-model="guardian.profession" fluid />
+                </div>
+
+                <template #footer>
+                    <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="guardianDialog = false" />
+                    <Button label="Salvar" icon="pi pi-check" @click="saveGuardian" />
+                </template>
+            </Dialog>
+
+            <Dialog v-model:visible="deleteGuardianDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
+                <div class="flex align-items-center justify-content-center">
+                    <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
+                    <span>Deseja remover este responsável?</span>
+                </div>
+                <template #footer>
+                    <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteGuardianDialog = false" />
+                    <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteGuardian" />
+                </template>
+            </Dialog>
+        </div>
+    </div>
+</template>

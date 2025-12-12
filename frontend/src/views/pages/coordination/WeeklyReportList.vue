@@ -142,7 +142,7 @@ onMounted(() => {
 
             <Dialog v-model:visible="reportDialog" :style="{ width: '700px' }" header="Relatório Semanal" :modal="true" class="p-fluid">
                 
-                <div class="grid grid grid-cols-12 gap-4 mb-2">
+                <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-6">
                         <label class="mb-2 block font-bold">Data Início</label>
                         <Calendar v-model="report.start_date" dateFormat="dd/mm/yy" showIcon fluid />

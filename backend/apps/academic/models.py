@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Segment(models.Model):
@@ -29,17 +30,61 @@ class Subject(models.Model):
     def __str__(self):
         return self.name
 
+class Guardian(models.Model):
+    name = models.CharField("Nome Completo", max_length=150)
+    cpf = models.CharField("CPF", max_length=14, unique=True) 
+    rg = models.CharField("RG", max_length=20, blank=True, null=True)
+    email = models.EmailField("Email", blank=True, null=True) 
+    phone = models.CharField("Celular/WhatsApp", max_length=20)
+    profession = models.CharField("Profissão", max_length=100, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Responsável"
+        verbose_name_plural = "Responsáveis"
+
+    def __str__(self):
+        return self.name
+
 class Student(models.Model):
-    name = models.CharField("Nome Completo", max_length=200)
+    # Identificação Básica
+    name = models.CharField("Nome Completo", max_length=150)
     registration_number = models.CharField("Matrícula", max_length=20, unique=True)
+    photo = models.ImageField(upload_to='students/', blank=True, null=True)
+    
+    # Identificação Civil (Novos Campos)
     birth_date = models.DateField("Data de Nascimento", null=True, blank=True)
-    # Podemos adicionar foto, nome dos pais, etc. depois
+    gender = models.CharField("Gênero", max_length=10, choices=[('M', 'Masculino'), ('F', 'Feminino')], blank=True)
+    cpf = models.CharField("CPF", max_length=14, blank=True, null=True)
+    rg = models.CharField("RG", max_length=20, blank=True, null=True)
+    nationality = models.CharField("Nacionalidade", max_length=50, default="Brasileira")
+    
+    # Endereço
+    zip_code = models.CharField("CEP", max_length=9, blank=True)
+    street = models.CharField("Endereço", max_length=150, blank=True)
+    number = models.CharField("Número", max_length=10, blank=True)
+    complement = models.CharField("Complemento", max_length=50, blank=True)
+    neighborhood = models.CharField("Bairro", max_length=50, blank=True)
+    city = models.CharField("Cidade", max_length=50, default="Mogi das Cruzes")
+    state = models.CharField("UF", max_length=2, default="SP")
+
+    # Dados de Saúde/Emergência
+    allergies = models.TextField("Alergias", blank=True)
+    medications = models.TextField("Uso Contínuo de Medicamentos", blank=True)
+    emergency_contact = models.CharField("Contato de Emergência (Nome/Tel)", max_length=100, blank=True)
+
+    # Vínculos
+    # ManyToMany: Um aluno pode ter vários responsáveis (Pai e Mãe)
+    # e um responsável pode ter vários alunos (Irmãos)
+    guardians = models.ManyToManyField(Guardian, related_name="students", verbose_name="Responsáveis", blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name = "Aluno"
         verbose_name_plural = "Alunos"
+        ordering = ['name']
 
     def __str__(self):
         return f"{self.name} ({self.registration_number})"
@@ -59,12 +104,12 @@ class Enrollment(models.Model):
         return f"{self.student.name} -> {self.classroom.name}"
 
 class TeacherAssignment(models.Model):
-    """Vincula Professor -> Matéria -> Turma (Quem dá aula do quê e onde)"""
     teacher = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.CASCADE, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='assignments',
         verbose_name="Professor",
-        limit_choices_to={'is_teacher': True} # Só mostra usuários marcados como professor
+        limit_choices_to={'groups__name': 'Professores'} 
     )
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, verbose_name="Matéria")
     classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, verbose_name="Turma")
@@ -129,3 +174,46 @@ class Attendance(models.Model):
     def __str__(self):
         status = "Presente" if self.present else "Faltou"
         return f"{self.date} - {self.enrollment.student.name}: {status}"
+
+class LessonPlan(models.Model):
+    STATUS_CHOICES = [
+        ('DRAFT', 'Rascunho'),
+        ('SUBMITTED', 'Enviado'),
+        ('APPROVED', 'Visto da Coordenação'),
+        ('RETURNED', 'Precisa de Ajuste')
+    ]
+
+    # Vínculo: Quem é o professor, qual matéria e qual turma?
+    # Usamos o TeacherAssignment que já amarra tudo isso.
+    assignment = models.ForeignKey(TeacherAssignment, on_delete=models.CASCADE, verbose_name="Atribuição")
+    
+    # Período
+    start_date = models.DateField("Início da Semana")
+    end_date = models.DateField("Fim da Semana")
+    
+    # Conteúdo (Usaremos Editor Rico aqui)
+    topic = models.CharField("Tema / Tópico Principal", max_length=200)
+    description = models.TextField("Desenvolvimento da Aula", blank=True)
+    resources = models.TextField("Recursos Didáticos", blank=True)
+    homework = models.TextField("Lição de Casa / Fixação", blank=True)
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, 
+        related_name='received_plans', 
+        verbose_name="Enviar para", 
+        blank=True
+    )
+    
+    # Fluxo de Aprovação
+    status = models.CharField("Status", max_length=20, choices=STATUS_CHOICES, default='DRAFT')
+    coordinator_note = models.TextField("Feedback da Coordenação", blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Planejamento Semanal"
+        verbose_name_plural = "Planejamentos Semanais"
+        ordering = ['-start_date']
+
+    def __str__(self):
+        return f"Semana {self.start_date} - {self.assignment}"

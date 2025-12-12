@@ -177,7 +177,7 @@ onMounted(() => {
                     <Calendar v-model="observation.date" dateFormat="dd/mm/yy" showIcon fluid />
                 </div>
 
-                <div class="grid grid grid-cols-12 gap-4 mb-2">
+                <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-6">
                         <label>Pontualidade</label>
                         <Rating v-model="observation.pontuality" :cancel="false" />

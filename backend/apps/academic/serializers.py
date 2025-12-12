@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import Segment, ClassRoom, Subject, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod
+from django.contrib.auth import get_user_model
+from .models import Segment, ClassRoom, Subject, Guardian, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan
+
+User = get_user_model()
 
 class SegmentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -14,7 +17,15 @@ class ClassRoomSerializer(serializers.ModelSerializer):
         model = ClassRoom
         fields = ['id', 'name', 'year', 'segment', 'segment_name']
 
+class GuardianSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Guardian
+        fields = '__all__'
+
 class StudentSerializer(serializers.ModelSerializer):
+    guardians_details = GuardianSerializer(source='guardians', many=True, read_only=True)
+    guardians = serializers.PrimaryKeyRelatedField(many=True, queryset=Guardian.objects.all(), required=False)
+    
     class Meta:
         model = Student
         fields = '__all__'
@@ -95,3 +106,27 @@ class AcademicPeriodSerializer(serializers.ModelSerializer):
     class Meta:
         model = AcademicPeriod
         fields = '__all__'
+
+class LessonPlanSerializer(serializers.ModelSerializer):
+    # Campos de leitura para facilitar o frontend
+    teacher_name = serializers.CharField(source='assignment.teacher.get_full_name', read_only=True)
+    subject_name = serializers.CharField(source='assignment.subject.name', read_only=True)
+    classroom_name = serializers.CharField(source='assignment.classroom.name', read_only=True)
+
+    class Meta:
+        model = LessonPlan
+        fields = '__all__'
+
+class SimpleUserSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = User
+        # ADICIONE 'first_name' AQUI:
+        fields = ['id', 'username', 'first_name', 'full_name', 'email'] 
+
+    def get_full_name(self, obj):
+        name = obj.get_full_name()
+        if name:
+            return f"{name} ({obj.username})"
+        return obj.username

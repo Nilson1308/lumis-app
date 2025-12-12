@@ -8,9 +8,6 @@ import { defineConfig } from 'vite';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    optimizeDeps: {
-        noDiscovery: true
-    },
     plugins: [
         vue(),
         tailwindcss(),
@@ -22,5 +19,8 @@ export default defineConfig({
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))
         }
+    },
+    optimizeDeps: {
+        noDiscovery: true
     }
 });

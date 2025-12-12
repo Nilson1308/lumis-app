@@ -4,12 +4,14 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
-    full_name = serializers.SerializerMethodField()
-    
+    # Transforma os objetos Group em uma lista de strings: ['Professores', 'Coordenacao']
+    groups = serializers.SlugRelatedField(
+        many=True, 
+        read_only=True, 
+        slug_field='name'
+    )
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'full_name', 'is_teacher', 'is_coordinator']
-        read_only_fields = fields
-
-    def get_full_name(self, obj):
-        return obj.get_full_name() or obj.username
+        # Garanta que 'groups' está na lista, além dos campos padrão
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'groups', 'is_superuser']

@@ -3,60 +3,67 @@ import api from '@/service/api';
 
 export const useAuthStore = defineStore('auth', {
     state: () => ({
-        user: null, // O objeto do usuário (nome, email, is_teacher)
-        token: localStorage.getItem('access_token') || null,
-        isAuthenticated: false
+        user: null,
+        token: localStorage.getItem('token') || null,
     }),
 
     getters: {
-        // Getters funcionam como "propriedades computadas" globais
-        isCoordinator: (state) => state.user?.is_coordinator || state.user?.is_superuser,
-        isTeacher: (state) => state.user?.is_teacher,
-        fullName: (state) => state.user?.full_name || 'Usuário'
+        isAuthenticated: (state) => !!state.token,
+
+        isAdmin: (state) => state.user?.is_superuser,
+
+        isCoordinator: (state) => {
+            return state.user?.groups?.includes('Coordenacao');
+        },
+
+        isTeacher: (state) => {
+            return state.user?.groups?.includes('Professores');
+        },
+    
+        userRole: (state) => {
+            if (state.user?.is_superuser) return 'Administrador';
+            if (state.user?.groups?.includes('Coordenacao')) return 'Coordenação';
+            if (state.user?.groups?.includes('Professores')) return 'Docente';
+            return 'Colaborador';
+        }
     },
 
     actions: {
-        // Ação 1: Fazer Login e buscar dados do usuário
-        async login(username, password) {
+        async login(credentials) {
             try {
-                // 1. Pega o Token
-                const response = await api.post('token/', { username, password });
+                const response = await api.post('token/', credentials);
                 this.token = response.data.access;
                 
-                // Salva no LocalStorage e atualiza o estado
-                localStorage.setItem('access_token', response.data.access);
-                localStorage.setItem('refresh_token', response.data.refresh);
-                this.isAuthenticated = true;
-
-                // 2. Busca os dados do usuário imediatamente (/me)
+                // 1. Salva no Storage
+                localStorage.setItem('token', this.token);
+                
+                // 2. CORREÇÃO IMEDIATA: Seta o header na hora
+                api.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+                
+                // 3. Agora sim busca o usuário (o header já estará lá)
                 await this.fetchUser();
                 
-                return true; // Sucesso
+                return true;
             } catch (error) {
                 console.error("Erro no login:", error);
                 throw error;
             }
         },
 
-        // Ação 2: Buscar dados do usuário logado (/me)
         async fetchUser() {
             try {
                 const response = await api.get('users/me/');
                 this.user = response.data;
-                this.isAuthenticated = true;
             } catch (error) {
-                this.logout(); // Se der erro ao buscar user, o token é inválido
+                this.logout();
             }
         },
 
-        // Ação 3: Logout
         logout() {
-            this.user = null;
             this.token = null;
-            this.isAuthenticated = false;
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            // O redirecionamento acontece no Router ou no componente
+            this.user = null;
+            
+            localStorage.removeItem('token');
         }
     }
 });

@@ -35,6 +35,14 @@ const openAttendance = (assignment) => {
     });
 };
 
+const openPlanning = (assignment) => {
+    // Redireciona para a lista de planejamentos, mas passando o ID na URL
+    router.push({ 
+        name: 'lesson-plans', 
+        query: { assignment: assignment.id } 
+    });
+};
+
 onMounted(() => {
     fetchMyClasses();
 });
@@ -62,7 +70,7 @@ onMounted(() => {
     </div>
 
     <div v-else class="grid grid-cols-12 gap-6">
-        <div class="col-span-12 lg:col-span-4 xl:col-span-4" v-for="item in myClasses" :key="item.id">
+        <div class="col-span-12 lg:col-span-3 xl:col-span-3" v-for="item in myClasses" :key="item.id">
             <div class="card">
                 <div class="flex justify-between mb-3">
                     <div>
@@ -74,18 +82,29 @@ onMounted(() => {
                     </div>
                 </div>
                 <Divider/>
-                <div class="mt-auto flex gap-2">
+                <div class="mt-auto flex flex-col gap-2">
                     <Button 
-                        label="Notas" 
+                        label="Lançar Notas" 
                         icon="pi pi-pencil" 
-                        class="p-button-outlined flex-1" 
+                        class="p-button-outlined flex-1 p-button-sm" 
+                        v-tooltip.top="'Lançar Notas'"
                         @click="openClassroom(item)" 
                     />
+                    
                     <Button 
-                        label="Chamada" 
+                        label="Lançar Chamada" 
                         icon="pi pi-calendar-plus" 
-                        class="p-button-outlined flex-1" 
+                        class="p-button-outlined flex-1 p-button-sm" 
+                        v-tooltip.top="'Realizar Chamada'"
                         @click="openAttendance(item)" 
+                    />
+                    
+                    <Button
+                        label="Planejamento Semanal" 
+                        icon="pi pi-list" 
+                        class="p-button-outlined flex-1 p-button-sm" 
+                        v-tooltip.top="'Semanário / Planejamento'"
+                        @click="openPlanning(item)" 
                     />
                 </div>
             </div>

@@ -127,7 +127,7 @@ onMounted(() => {
 
             <Dialog v-model:visible="minuteDialog" :style="{ width: '700px' }" header="Registro de Reunião" :modal="true" class="p-fluid">
                 
-                <div class="grid grid grid-cols-12 gap-4 mb-2">
+                <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-8">
                         <label class="mb-2 block font-bold">Título / Pauta Principal</label>
                         <InputText v-model="minute.title" required="true" autofocus :class="{ 'p-invalid': submitted && !minute.title }" fluid />

@@ -11,11 +11,13 @@ import Editor from 'primevue/editor';
 
 import { updatePreset } from '@primeuix/themes';
 
-import 'quill/dist/quill.snow.css';
 import '@/assets/tailwind.css';
 import '@/assets/styles.scss';
+import 'quill/dist/quill.snow.css';
 
 const app = createApp(App);
+
+app.component('Editor', Editor);
 
 app.use(createPinia());
 app.use(router);
@@ -27,8 +29,6 @@ app.use(PrimeVue, {
         }
     }
 });
-
-app.component('Editor', Editor);
 
 updatePreset({
     semantic: {

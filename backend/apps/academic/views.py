@@ -6,11 +6,12 @@ from django.db import transaction
 from django.db.models import Count, Avg, Q
 from django.contrib.auth import get_user_model
 User = get_user_model()
-from .models import Segment, ClassRoom, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance, AcademicPeriod
+from .models import Segment, ClassRoom, Guardian, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
     EnrollmentSerializer, SubjectSerializer, TeacherAssignmentSerializer,
-    GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer
+    GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
+    GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer
 )
 
 class SegmentViewSet(viewsets.ModelViewSet):
@@ -20,6 +21,11 @@ class SegmentViewSet(viewsets.ModelViewSet):
 class ClassRoomViewSet(viewsets.ModelViewSet):
     queryset = ClassRoom.objects.all()
     serializer_class = ClassRoomSerializer
+
+class GuardianViewSet(viewsets.ModelViewSet):
+    queryset = Guardian.objects.all().order_by('name')
+    serializer_class = GuardianSerializer
+    search_fields = ['name', 'cpf', 'email']
 
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().order_by('name')
@@ -52,6 +58,17 @@ class TeacherAssignmentViewSet(viewsets.ModelViewSet):
         'subject__name', 
         'classroom__name'
     ]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = TeacherAssignment.objects.all()
+
+        # Se for Superusuário ou Coordenador (Via Grupo!), vê tudo
+        if user.is_superuser or user.groups.filter(name='Coordenacao').exists():
+            return queryset
+        
+        # Se for Professor, só vê as SUAS
+        return queryset.filter(teacher=user)
 
     @action(detail=False, methods=['get'])
     def my_classes(self, request):
@@ -132,20 +149,9 @@ class DashboardDataView(APIView):
         # 1. Cards (KPIs)
         total_students = Student.objects.count()
         total_classes = ClassRoom.objects.count()
-        # Conta usuários que são professores
         total_teachers = User.objects.filter(is_teacher=True).count() 
-        
-        # Alunos em risco (Média geral abaixo de 6) - Lógica simplificada para MVP
-        # Idealmente filtraríamos pelo bimestre atual
         risk_students = 0 
-        # (Deixaremos 0 por enquanto para não pesar a query no MVP, 
-        # mas aqui entraria uma query de agregação de notas)
-
-        # 2. Gráfico de Pizza: Alunos por Segmento
-        # Retorna: [{'segment__name': 'Infantil', 'total': 50}, ...]
         students_by_segment = Student.objects.values('enrollment__classroom__segment__name').annotate(total=Count('id')).order_by('total')
-
-        # 3. Gráfico de Barras: Média da Escola por Matéria (Top 5)
         avg_by_subject = Grade.objects.values('subject__name').annotate(avg=Avg('value')).order_by('-avg')[:5]
 
         data = {
@@ -161,3 +167,31 @@ class DashboardDataView(APIView):
             }
         }
         return Response(data)
+
+class LessonPlanViewSet(viewsets.ModelViewSet):
+    serializer_class = LessonPlanSerializer
+    filterset_fields = ['assignment', 'status', 'start_date', 'assignment__teacher']
+    
+    def get_queryset(self):
+        user = self.request.user
+        queryset = LessonPlan.objects.all().order_by('-start_date')
+        
+        # Se for Superusuário ou Coordenador, vê tudo
+        if user.is_superuser or user.groups.filter(name='Coordenacao').exists():
+            return queryset
+        
+        # Se for Professor, só vê os planos das SUAS atribuições
+        if hasattr(user, 'teacher_profile'): # Supondo que usamos is_teacher flag ou checagem similar
+             # Filtra planos onde a atribuição pertence ao professor logado
+             return queryset.filter(assignment__teacher=user)
+        
+        # Fallback (se não for nada, não vê nada ou vê tudo dependendo da regra)
+        # Por segurança, se não é coord nem super, filtra pelo usuário
+        return queryset.filter(assignment__teacher=user)
+
+class CoordinatorViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = SimpleUserSerializer
+    
+    def get_queryset(self):
+        # Agora funciona independente de qual tabela de usuário você usa
+        return User.objects.filter(groups__name='Coordenacao').order_by('first_name')
