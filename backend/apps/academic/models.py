@@ -1,6 +1,5 @@
 from django.db import models
 from django.conf import settings
-from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Segment(models.Model):
@@ -31,6 +30,13 @@ class Subject(models.Model):
         return self.name
 
 class Guardian(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True, 
+        related_name='guardian_profile'
+    )
     name = models.CharField("Nome Completo", max_length=150)
     cpf = models.CharField("CPF", max_length=14, unique=True) 
     rg = models.CharField("RG", max_length=20, blank=True, null=True)

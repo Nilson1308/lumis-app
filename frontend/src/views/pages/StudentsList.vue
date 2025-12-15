@@ -25,7 +25,7 @@ const FilterMatchMode = {
 };
 
 const students = ref([]);
-const guardians = ref([]); // Lista para o Dropdown
+const guardians = ref([]); // Lista de opções para o Dropdown
 const student = ref({});
 const studentDialog = ref(false);
 const deleteStudentDialog = ref(false);
@@ -44,9 +44,16 @@ const loadData = async () => {
         const resStudents = await api.get('students/?page_size=100');
         students.value = resStudents.data.results;
 
-        // Busca Responsáveis (para o vínculo)
-        const resGuardians = await api.get('guardians/?page_size=100');
-        guardians.value = resGuardians.data.results;
+        // Busca Responsáveis
+        const resGuardians = await api.get('guardians/?page_size=1000');
+        const listaBruta = resGuardians.data.results || resGuardians.data;
+        
+        // Mapeamento: Cria o campo 'label' para a LISTA DE OPÇÕES
+        guardians.value = listaBruta.map(g => ({
+            ...g, // Mantém id, cpf, email, etc
+            label: g.name ? `${g.name} ${g.cpf ? '(' + g.cpf + ')' : ''}` : `Sem Nome (ID: ${g.id})`
+        }));
+
     } catch (e) {
         console.error(e);
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados' });
@@ -57,12 +64,9 @@ const loadData = async () => {
 
 // --- BUSCA DE CEP (VIACEP) ---
 const searchCep = async () => {
-    // Remove tudo que não é número (ex: traço)
     const cep = student.value.zip_code ? student.value.zip_code.replace(/\D/g, '') : '';
 
-    if (cep.length !== 8) {
-        return; // Não faz nada se o CEP estiver incompleto
-    }
+    if (cep.length !== 8) return;
 
     try {
         const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
@@ -73,20 +77,14 @@ const searchCep = async () => {
             return;
         }
 
-        // Preenche os campos automaticamente
         student.value.street = data.logradouro;
         student.value.neighborhood = data.bairro;
         student.value.city = data.localidade;
         student.value.state = data.uf;
         
-        // Foca no campo número (opcional, mas boa UX)
-        // document.getElementById('number')?.focus(); 
-
-        toast.add({ severity: 'info', summary: 'Endereço', detail: 'Endereço carregado com sucesso!', life: 3000 });
-
+        toast.add({ severity: 'info', summary: 'Endereço', detail: 'Endereço carregado!', life: 3000 });
     } catch (error) {
-        console.error("Erro ao buscar CEP:", error);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao buscar CEP. Verifique sua conexão.', life: 3000 });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao buscar CEP.', life: 3000 });
     }
 };
 
@@ -96,7 +94,7 @@ const openNew = () => {
         nationality: 'Brasileira',
         city: 'Mogi das Cruzes',
         state: 'SP',
-        guardians: [] // Array de IDs
+        guardians: [] // Array vazio obrigatório
     };
     submitted.value = false;
     studentDialog.value = true;
@@ -105,15 +103,20 @@ const openNew = () => {
 const editStudent = (prod) => {
     student.value = { ...prod };
     
-    // Converter data string YYYY-MM-DD para Objeto Date (para o Calendar funcionar)
+    // Ajuste de Data
     if (student.value.birth_date) {
-        // Truque para ajustar fuso horário
         const parts = student.value.birth_date.split('-');
         student.value.birth_date = new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    // Garantir que guardians seja um array (o backend pode mandar null se vazio)
-    if (!student.value.guardians) student.value.guardians = [];
+    // --- A CORREÇÃO SIMPLIFICADA ---
+    // Transforma a lista de objetos [{id:1, name: '...'}, {id:2...}] 
+    // em uma lista simples de IDs: [1, 2]
+    if (student.value.guardians && Array.isArray(student.value.guardians)) {
+        student.value.guardians = student.value.guardians.map(g => g.id);
+    } else {
+        student.value.guardians = [];
+    }
     
     studentDialog.value = true;
 };
@@ -128,12 +131,18 @@ const saveStudent = async () => {
     submitted.value = true;
 
     if (student.value.name && student.value.registration_number) {
-        // Clona e prepara payload
+        // Clona para não afetar a tela visualmente enquanto salva
         const payload = { ...student.value };
         
-        // Formata Data para API (YYYY-MM-DD)
+        // 1. Formata Data (YYYY-MM-DD)
         if (payload.birth_date instanceof Date) {
             payload.birth_date = payload.birth_date.toISOString().split('T')[0];
+        }
+
+        // 2. Extrai apenas os IDs dos Responsáveis para enviar ao Backend
+        // O componente usa Objetos inteiros, mas a API espera [1, 2, 5]
+        if (payload.guardians && payload.guardians.length > 0) {
+            payload.guardians = payload.guardians.map(g => (g.id ? g.id : g));
         }
 
         try {
@@ -190,7 +199,7 @@ onMounted(() => {
                             <InputIcon>
                                 <i class="pi pi-search" />
                             </InputIcon>
-                            <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
+                            <InputText v-model="filters['global'].value" placeholder="Buscar..." />
                         </IconField>
                     </div>
                 </template>
@@ -304,17 +313,19 @@ onMounted(() => {
                     <TabPanel header="Responsáveis (Pais)">
                         <div class="mb-2">
                             <label class="block font-bold mb-3">Vincular Responsáveis Cadastrados</label>
+                            
                             <MultiSelect 
+                                id="guardians"
                                 v-model="student.guardians" 
                                 :options="guardians" 
-                                optionLabel="name" 
-                                optionValue="id" 
-                                placeholder="Selecione os pais/responsáveis" 
+                                optionLabel="label" 
+                                dataKey="id"
+                                placeholder="Busque pelo nome ou CPF..." 
                                 display="chip" 
-                                class="w-full"
                                 filter
                                 fluid
                             />
+                            
                             <small class="block mt-2">
                                 Não encontrou? <router-link to="/academic/guardians">Cadastre o Responsável aqui</router-link> antes de vincular.
                             </small>

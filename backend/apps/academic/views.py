@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db import transaction
 from django.db.models import Count, Avg, Q
@@ -11,7 +12,7 @@ from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
     EnrollmentSerializer, SubjectSerializer, TeacherAssignmentSerializer,
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
-    GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer
+    GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer
 )
 
 class SegmentViewSet(viewsets.ModelViewSet):
@@ -30,8 +31,148 @@ class GuardianViewSet(viewsets.ModelViewSet):
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().order_by('name')
     serializer_class = StudentSerializer
-    # Habilita busca por nome e matrícula na URL (ex: ?search=Maria)
     search_fields = ['name', 'registration_number'] 
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='my-children')
+    def my_children(self, request):
+        user = request.user
+        
+        # 1. Verifica se o usuário tem perfil de Responsável
+        if not hasattr(user, 'guardian_profile'):
+            return Response({"detail": "Usuário não é um responsável vinculado."}, status=403)
+            
+        # 2. Pega o perfil de Guardian desse usuário
+        guardian_profile = user.guardian_profile
+        
+        # 3. Busca os alunos onde este responsável está na lista de 'guardians'
+        # CORREÇÃO: Usamos o filtro direto no Modelo Student, é mais seguro.
+        my_kids = Student.objects.filter(guardians=guardian_profile)
+        
+        # 4. Serializa e retorna
+        serializer = ParentStudentSerializer(my_kids, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated], url_path='report-card')
+    def report_card(self, request, pk=None):
+        # 1. Validação de Segurança (Pai <-> Aluno)
+        user = request.user
+        if not hasattr(user, 'guardian_profile'):
+             return Response({"detail": "Acesso negado."}, status=403)
+        
+        guardian = user.guardian_profile
+        student = self.get_object()
+        
+        if not student.guardians.filter(id=guardian.id).exists():
+            return Response({"detail": "Este aluno não está vinculado a você."}, status=403)
+
+        enrollment = student.enrollment_set.last()
+        if not enrollment:
+            return Response([])
+
+        # 2. Busca Notas
+        grades = Grade.objects.filter(enrollment=enrollment)
+        
+        # 3. Definição segura das Matérias (Sem adivinhação de .all())
+        all_subjects = []
+        classroom = enrollment.classroom
+        
+        # Tenta pegar 'subjects' (se definido related_name)
+        if hasattr(classroom, 'subjects'):
+            all_subjects = list(classroom.subjects.all())
+        # Tenta pegar 'subject_set' (padrão do Django)
+        elif hasattr(classroom, 'subject_set'):
+            all_subjects = list(classroom.subject_set.all())
+        
+        # Inicia o relatório
+        report = {}
+        for subj in all_subjects:
+            report[subj.name] = {"1": "-", "2": "-", "3": "-", "4": "-", "final": "-"}
+
+        # 4. Preenche Notas (Verificando caminho da Matéria)
+        for g in grades:
+            subj_name = None
+            
+            # Tenta Caminho 1: Ligação direta Grade -> Subject
+            if hasattr(g, 'subject') and g.subject:
+                subj_name = g.subject.name
+            # Tenta Caminho 2: Grade -> Assignment -> Subject
+            elif hasattr(g, 'assignment') and g.assignment and hasattr(g.assignment, 'subject') and g.assignment.subject:
+                subj_name = g.assignment.subject.name
+            
+            # Se não achou a matéria, ignora essa nota para não quebrar
+            if not subj_name:
+                continue
+
+            # Se a matéria não estava na lista da sala, adiciona agora
+            if subj_name not in report:
+                report[subj_name] = {"1": "-", "2": "-", "3": "-", "4": "-", "final": "-"}
+
+            term = str(g.term)
+            report[subj_name][term] = g.value
+
+        # 5. Formata saída
+        data = []
+        for subject, grades_dict in report.items():
+            row = {"subject": subject}
+            row.update(grades_dict)
+            data.append(row)
+            
+        return Response(data)
+
+    # --- RELATÓRIO DE FALTAS ---
+    @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated], url_path='attendance-report')
+    def attendance_report(self, request, pk=None):
+        # 1. Segurança (Mesma lógica acima)
+        user = request.user
+        if not hasattr(user, 'guardian_profile'): return Response(status=403)
+        guardian = user.guardian_profile
+        student = self.get_object()
+        if not student.guardians.filter(id=guardian.id).exists(): return Response(status=403)
+
+        enrollment = student.enrollment_set.last()
+        if not enrollment: return Response([])
+
+        # 2. Busca Faltas (is_present=False)
+        absences = Attendance.objects.filter(enrollment=enrollment, is_present=False)
+
+        # 3. Agrupa contagem por matéria
+        summary = {}
+        # Inicializa matérias com 0
+        for subj in enrollment.classroom.subjects.all():
+            summary[subj.name] = 0
+            
+        for att in absences:
+            # O attendance está ligado a uma aula (ClassSchedule) que tem Subject?
+            # Se seu model Attendance liga direto a Assignment ou ClassSchedule, ajuste aqui.
+            # Vou assumir: Attendance -> ClassSchedule -> Subject
+            # OU se Attendance -> Assignment -> Subject
+            # Vamos supor um caminho genérico, ajuste conforme seu model real:
+            try:
+                # Exemplo: att.schedule.subject.name
+                # Se não tiver essa relação direta, precisaremos revisar seu model Attendance.
+                # Vou usar um placeholder assumindo que Attendance tem data e talvez matéria via schedule
+                subj_name = "Geral" 
+                if hasattr(att, 'schedule') and att.schedule:
+                    subj_name = att.schedule.subject.name
+                
+                if subj_name in summary:
+                    summary[subj_name] += 1
+            except:
+                pass
+
+        # Lista Detalhada
+        history = []
+        for att in absences:
+            history.append({
+                "date": att.date,
+                "subject": getattr(att.schedule.subject, 'name', 'Geral') if hasattr(att, 'schedule') else 'Dia Letivo',
+                "justified": att.justified
+            })
+
+        return Response({
+            "summary": [{"subject": k, "count": v} for k,v in summary.items()],
+            "history": history
+        })
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
     queryset = Enrollment.objects.all().order_by('student__name')

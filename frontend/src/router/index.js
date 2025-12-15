@@ -20,6 +20,24 @@ const router = createRouter({
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
+                {
+                    path: '/parent/dashboard',
+                    name: 'parent-dashboard',
+                    component: () => import('@/views/pages/parents/ParentDashboard.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
+                    path: '/parent/student/:id/report-card',
+                    name: 'parent-report-card',
+                    component: () => import('@/views/pages/parents/ReportCardView.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
+                    path: '/parent/student/:id/attendance',
+                    name: 'parent-attendance',
+                    component: () => import('@/views/pages/parents/AttendanceView.vue'),
+                    meta: { requiresAuth: true }
+                },
                 
                 // --- MÓDULO ACADÊMICO ---
                 {

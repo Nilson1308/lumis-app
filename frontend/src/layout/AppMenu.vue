@@ -9,12 +9,22 @@ const model = ref([]);
 // Usamos watchEffect para reconstruir o menu se o usuário mudar (login/logout)
 watchEffect(() => {
     const newMenu = [];
-
-    // 1. DASHBOARD (Todos vêem)
-    newMenu.push({
-        label: 'Home',
-        items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: { name: 'dashboard' } }]
-    });
+    if (!authStore.isGuardian) {
+        // 1. DASHBOARD (Todos vêem)
+        newMenu.push({
+            label: 'Home',
+            items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: { name: 'dashboard' } }]
+        });
+    }
+    // 2. PORTAL DA FAMÍLIA (Exclusivo para Pais)
+    if (authStore.isGuardian) {
+        newMenu.push({
+            label: 'Portal da Família',
+            items: [
+                { label: 'Meus Filhos', icon: 'pi pi-fw pi-users', to: { name: 'parent-dashboard' } }
+            ]
+        });
+    }
 
     // 2. ACADÊMICO (Secretaria / Coordenação / Admin)
     if (authStore.isAdmin || authStore.isCoordinator) {

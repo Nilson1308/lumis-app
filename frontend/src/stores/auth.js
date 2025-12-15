@@ -20,10 +20,15 @@ export const useAuthStore = defineStore('auth', {
             return state.user?.groups?.includes('Professores');
         },
     
+        isGuardian: (state) => {
+            return state.user?.groups?.includes('Responsaveis');
+        },
+        
         userRole: (state) => {
             if (state.user?.is_superuser) return 'Administrador';
             if (state.user?.groups?.includes('Coordenacao')) return 'Coordenação';
             if (state.user?.groups?.includes('Professores')) return 'Docente';
+            if (state.user?.groups?.includes('Responsaveis')) return 'Responsável'; // <--- NOVO
             return 'Colaborador';
         }
     },

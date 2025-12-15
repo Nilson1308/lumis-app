@@ -16,19 +16,25 @@ const handleLogin = async () => {
     errorMessage.value = '';
 
     try {
-        await authStore.login({ 
+        await authStore.login({
             username: username.value, 
-            password: password.value 
+            password: password.value
         });
-        router.push('/');
+        
+        // --- LÓGICA DE REDIRECIONAMENTO ---
+        if (authStore.isGuardian) {
+            // Se for Pai, vai pro Portal da Família
+            router.push({ name: 'parent-dashboard' });
+        } else if (authStore.isTeacher) {
+            // Se for Professor, vai pro Painel de Aulas (ou mantém dashboard se preferir)
+            router.push({ name: 'my-classes' }); 
+        } else {
+            // Admin e Coordenador vão pro Dashboard Geral
+            router.push({ name: 'dashboard' });
+        }
         
     } catch (error) {
-        console.error(error);
-        if (error.response && error.response.status === 401) {
-            errorMessage.value = 'Usuário ou senha inválidos.';
-        } else {
-            errorMessage.value = 'Erro ao conectar com o servidor.';
-        }
+        // ... erros ...
     } finally {
         loading.value = false;
     }

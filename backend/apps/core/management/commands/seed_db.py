@@ -41,6 +41,7 @@ class Command(BaseCommand):
             self.stdout.write('Criando Grupos...')
             group_prof, _ = Group.objects.get_or_create(name='Professores')
             group_coord, _ = Group.objects.get_or_create(name='Coordenacao')
+            group_parents, _ = Group.objects.get_or_create(name='Responsaveis')
 
             # 3. Criar Períodos
             self.stdout.write('Criando Bimestres...')
@@ -106,14 +107,34 @@ class Command(BaseCommand):
                     state=fake.state_abbr()
                 )
                 
-                # Cria Responsável (Pai/Mãe)
-                guardian = Guardian.objects.create(
-                    name=fake.name(),
-                    cpf=fake.cpf(),
-                    phone=fake.phone_number(),
-                    email=fake.email()
-                )
-                student.guardians.add(guardian) # Vincula
+                # --- LÓGICA NOVA PARA O PAI ---
+                guardian_name = fake.name()
+                guardian_cpf = fake.cpf()
+                guardian_email = fake.email()
+                
+                # 1. Cria o Usuário de Login (Username = CPF limpo)
+                cpf_limpo = guardian_cpf.replace('.', '').replace('-', '')
+                
+                # Verifica se user já existe para evitar erro em loops
+                if not User.objects.filter(username=cpf_limpo).exists():
+                    user_parent = User.objects.create_user(
+                        username=cpf_limpo,
+                        email=guardian_email,
+                        password='123'
+                    )
+                    user_parent.first_name = guardian_name.split()[0]
+                    user_parent.groups.add(group_parents)
+                    user_parent.save()
+
+                    # 2. Cria o Perfil Guardian vinculado
+                    guardian = Guardian.objects.create(
+                        user=user_parent, # Vínculo feito!
+                        name=guardian_name,
+                        cpf=guardian_cpf,
+                        phone=fake.phone_number(),
+                        email=guardian_email
+                    )
+                    student.guardians.add(guardian)
 
                 # Matricula
                 random_class = random.choice(classrooms)

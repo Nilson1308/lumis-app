@@ -130,3 +130,31 @@ class SimpleUserSerializer(serializers.ModelSerializer):
         if name:
             return f"{name} ({obj.username})"
         return obj.username
+
+class ParentStudentSerializer(serializers.ModelSerializer):
+    # Usamos SerializerMethodField para ter controle total da busca
+    classroom_name = serializers.SerializerMethodField()
+    segment_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Student
+        fields = ['id', 'name', 'registration_number', 'classroom_name', 'segment_name', 'birth_date']
+
+    def get_classroom_name(self, obj):
+        # Tenta pegar via 'enrollment_set' (padrão) ou 'enrollments' (se foi customizado)
+        enrolls = getattr(obj, 'enrollment_set', getattr(obj, 'enrollments', None))
+        
+        if enrolls:
+            last_enrollment = enrolls.last() # Pega a última matrícula
+            if last_enrollment and last_enrollment.classroom:
+                return last_enrollment.classroom.name
+        return "Sem Turma"
+
+    def get_segment_name(self, obj):
+        enrolls = getattr(obj, 'enrollment_set', getattr(obj, 'enrollments', None))
+        
+        if enrolls:
+            last_enrollment = enrolls.last()
+            if last_enrollment and last_enrollment.classroom and last_enrollment.classroom.segment:
+                return last_enrollment.classroom.segment.name
+        return "-"

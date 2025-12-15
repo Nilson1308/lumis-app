@@ -183,7 +183,7 @@ onMounted(() => { loadData(); });
             <Toolbar class="mb-4">
                 <template v-slot:start>
                     <div class="my-2 flex gap-2">
-                        <Button label="Novo Planejamento" icon="pi pi-plus" class="p-button-success mr-2" @click="openNew" />
+                        <Button label="Novo Planejamento" icon="pi pi-plus" class=" mr-2" @click="openNew" />
                         
                         <Button 
                             v-if="route.query.assignment" 
@@ -229,7 +229,7 @@ onMounted(() => { loadData(); });
 
                 <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
-                        <Button icon="pi pi-pencil" class="p-button-rounded p-button-success mr-2" @click="editPlan(slotProps.data)" />
+                        <Button icon="pi pi-pencil" class="p-button-rounded  mr-2" @click="editPlan(slotProps.data)" />
                         <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDelete(slotProps.data)" />
                     </template>
                 </Column>
