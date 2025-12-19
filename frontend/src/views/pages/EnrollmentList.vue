@@ -204,13 +204,14 @@ onMounted(() => {
         <div class="card">
             <Toast />
 
-            <div class="flex flex-column md:flex-row gap-4 mb-4 align-end p-fluid">
+            <div class="flex flex-col md:flex-row gap-4 mb-4 align-end p-fluid">
                 <div class="col-12 md:col-2">
                     <label class="block font-bold mb-2">Ano Letivo</label>
                     <Dropdown 
                         v-model="selectedYear" 
                         :options="availableYears" 
                         placeholder="Ano" 
+                        fluid
                     />
                 </div>
 
@@ -224,6 +225,7 @@ onMounted(() => {
                         placeholder="Selecione a Turma..." 
                         :disabled="!selectedYear"
                         emptyMessage="Nenhuma turma neste ano"
+                        fluid
                     />
                 </div>
 

@@ -182,7 +182,7 @@ onMounted(() => { loadData(); });
             <Toast />
             <Toolbar class="mb-4">
                 <template v-slot:start>
-                    <div class="my-2 flex gap-2">
+                    <div class="my-2 flex flex-col md:flex-row gap-2">
                         <Button label="Novo Planejamento" icon="pi pi-plus" class=" mr-2" @click="openNew" />
                         
                         <Button 
@@ -194,16 +194,22 @@ onMounted(() => { loadData(); });
                         />
                     </div>
                 </template>
-                <template v-slot:end>
-                    <span class="p-input-icon-left">
-                        <i class="pi pi-search" />
-                        <InputText v-model="filters['global'].value" placeholder="Buscar..." />
-                    </span>
-                </template>
             </Toolbar>
 
             <DataTable :value="plans" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10">
-                <template #header>Meus Planejamentos Semanais</template>
+                <template #header>
+                    <div class="flex flex-wrap gap-2 items-center justify-between">
+                        <h4 class="m-0">Meus Planejamentos Semanais</h4>
+                        <div class="flex gap-2">
+                            <IconField>
+                                <InputIcon>
+                                    <i class="pi pi-search" />
+                                </InputIcon>
+                                <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
+                            </IconField>
+                        </div>
+                    </div>
+                </template>
                 <template #empty>Nenhum planejamento encontrado.</template>
                 
                 <Column field="start_date" header="Semana" sortable style="width: 15%">
@@ -270,11 +276,11 @@ onMounted(() => { loadData(); });
                     
                     <div class="col-span-12 xl:col-span-3">
                         <label class="block font-bold mb-3">Início Semana</label>
-                        <Calendar v-model="plan.start_date" dateFormat="dd/mm/yy" showIcon fluid />
+                        <DatePicker v-model="plan.start_date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
                     <div class="col-span-12 xl:col-span-3">
                         <label class="block font-bold mb-3">Fim Semana</label>
-                        <Calendar v-model="plan.end_date" dateFormat="dd/mm/yy" showIcon fluid />
+                        <DatePicker v-model="plan.end_date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
 
                     <div class="col-span-12 xl:col-span-12">
@@ -284,17 +290,17 @@ onMounted(() => { loadData(); });
 
                     <div class="col-span-12 xl:col-span-12">
                         <label class="font-bold text-primary">Desenvolvimento da Aula (O que será feito?)</label>
-                        <Textarea v-model="plan.description" editorStyle="height: 200px" fluid />
+                        <Editor v-model="plan.description" fluid editorStyle="height: 320px" />
                     </div>
 
                     <div class="col-span-12 xl:col-span-6">
                         <label class="block font-bold mb-3">Recursos Didáticos</label>
-                        <Textarea v-model="plan.resources" editorStyle="height: 120px" fluid />
+                        <Editor v-model="plan.resources" fluid editorStyle="height: 160px" />
                     </div>
 
                     <div class="col-span-12 xl:col-span-6">
                         <label class="block font-bold mb-3">Lição de Casa / Fixação</label>
-                        <Textarea v-model="plan.homework" editorStyle="height: 120px" fluid />
+                        <Editor v-model="plan.homework" fluid editorStyle="height: 160px" />
                     </div>
 
                     <div class="field col-12" v-if="plan.coordinator_note">

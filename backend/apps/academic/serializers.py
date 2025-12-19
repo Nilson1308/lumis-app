@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Segment, ClassRoom, Subject, Guardian, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan
+from .models import Segment, ClassRoom, Subject, Guardian, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification
 
 User = get_user_model()
 
@@ -83,10 +83,11 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
     classroom_year = serializers.IntegerField(source='classroom.year', read_only=True)
+    unread_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = TeacherAssignment
-        fields = ['id', 'teacher', 'teacher_name', 'subject', 'subject_name', 'classroom', 'classroom_name', 'classroom_year']
+        fields = ['id', 'teacher', 'teacher_name', 'subject', 'subject_name', 'classroom', 'classroom_name', 'classroom_year', 'unread_count']
 
 class GradeSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
@@ -95,12 +96,28 @@ class GradeSerializer(serializers.ModelSerializer):
         model = Grade
         fields = '__all__'
 
+class AbsenceJustificationSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='attendance.enrollment.student.name', read_only=True)
+    classroom_name = serializers.CharField(source='attendance.enrollment.classroom.name', read_only=True)
+    absence_date = serializers.DateField(source='attendance.date', read_only=True)
+    
+    class Meta:
+        model = AbsenceJustification
+        fields = '__all__'
+        read_only_fields = ['reviewed_by', 'created_at']
+
 class AttendanceSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
+    # Mostra o status do pedido se houver
+    justification_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Attendance
-        fields = '__all__'
+        fields = ['id', 'date', 'present', 'justified', 'student_name', 'justification_status']
+
+    def get_justification_status(self, obj):
+        last_request = obj.justification_request.last()
+        return last_request.status if last_request else None
 
 class AcademicPeriodSerializer(serializers.ModelSerializer):
     class Meta:
@@ -138,7 +155,12 @@ class ParentStudentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Student
-        fields = ['id', 'name', 'registration_number', 'classroom_name', 'segment_name', 'birth_date']
+        fields = [
+            'id', 'name', 'registration_number', 'classroom_name', 'segment_name', 'birth_date',
+            'emergency_contact', 'allergies', 'medications', # Já usamos antes
+            # Novos campos de endereço:
+            'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state'
+        ]
 
     def get_classroom_name(self, obj):
         # Tenta pegar via 'enrollment_set' (padrão) ou 'enrollments' (se foi customizado)
@@ -158,3 +180,20 @@ class ParentStudentSerializer(serializers.ModelSerializer):
             if last_enrollment and last_enrollment.classroom and last_enrollment.classroom.segment:
                 return last_enrollment.classroom.segment.name
         return "-"
+
+class GuardianProfileUpdateSerializer(serializers.ModelSerializer):
+    """ Permite ao pai editar apenas seus dados de contato """
+    class Meta:
+        model = Guardian
+        fields = ['email', 'phone', 'email']
+
+class StudentHealthUpdateSerializer(serializers.ModelSerializer):
+    """ Permite ao pai editar apenas saúde e emergência do filho """
+    class Meta:
+        model = Student
+        fields = [
+            'emergency_contact', 
+            'allergies', 
+            'medications',
+            'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state' 
+        ]

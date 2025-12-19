@@ -137,9 +137,9 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <div class="flex items-center gap-3">
+                <div class="flex flex-col md:flex-row items-center gap-3">
                     <label class="block font-bold">Data da Aula:</label>
-                    <Calendar v-model="attendanceDate" dateFormat="dd/mm/yy" :showIcon="true" />
+                    <Calendar v-model="attendanceDate" dateFormat="dd/mm/yy" :showIcon="true" fluid />
                     <Button label="Salvar Chamada" icon="pi pi-check" :loading="saving" @click="saveAttendance" />
                 </div>
             </div>
@@ -154,7 +154,7 @@ onMounted(() => {
                         <ToggleButton 
                             v-model="slotProps.data.present" 
                             onLabel="Presente" 
-                            offLabel="Faltou" 
+                            offLabel="Faltou"
                             onIcon="pi pi-check" 
                             offIcon="pi pi-times"
                             class="w-full sm:w-10rem"

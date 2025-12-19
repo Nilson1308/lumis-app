@@ -140,28 +140,28 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="reportDialog" :style="{ width: '700px' }" header="Relatório Semanal" :modal="true" class="p-fluid">
+            <Dialog v-model:visible="reportDialog" :style="{ width: '800px' }" header="Relatório Semanal" :modal="true" class="p-fluid" maximizable>
                 
                 <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-6">
                         <label class="mb-2 block font-bold">Data Início</label>
-                        <Calendar v-model="report.start_date" dateFormat="dd/mm/yy" showIcon fluid />
+                        <DatePicker v-model="report.start_date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
                     <div class="col-span-12 xl:col-span-6">
                         <label class="mb-2 block font-bold">Data Fim</label>
-                        <Calendar v-model="report.end_date" dateFormat="dd/mm/yy" showIcon fluid />
+                        <DatePicker v-model="report.end_date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
                 </div>
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Resumo das Atividades</label>
-                    <Textarea v-model="report.description" rows="8" autoResize placeholder="O que foi realizado nesta semana?" :class="{ 'p-invalid': submitted && !report.description }" fluid />
+                    <Editor v-model="report.description" rows="8" autoResize placeholder="O que foi realizado nesta semana?" :class="{ 'p-invalid': submitted && !report.description }" fluid editorStyle="height: 320px" />
                     <small class="p-error" v-if="submitted && !report.description">Obrigatório.</small>
                 </div>
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold text-red-500">Pendências / Pontos de Atenção</label>
-                    <Textarea v-model="report.pending_issues" rows="4" autoResize placeholder="Algum problema não resolvido? Aluno crítico?" fluid />
+                    <Editor v-model="report.pending_issues" rows="4" autoResize placeholder="Algum problema não resolvido? Aluno crítico?" fluid editorStyle="height: 320px" />
                 </div>
 
                 <template #footer>

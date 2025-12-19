@@ -43,6 +43,13 @@ const openPlanning = (assignment) => {
     });
 };
 
+const openObservations = (assignment) => {
+    router.push({ 
+        name: 'teacher-observations', 
+        query: { assignment: assignment.id } // Passa o ID da aula na URL
+    });
+};
+
 onMounted(() => {
     fetchMyClasses();
 });
@@ -82,28 +89,38 @@ onMounted(() => {
                     </div>
                 </div>
                 <Divider/>
-                <div class="mt-auto flex flex-col gap-2">
+                <div class="mt-auto grid grid-cols-2 gap-2">
+                    <div class="col-span-2 relative">
+                        <Button 
+                            label="Feedbacks / Observações" 
+                            icon="pi pi-envelope" 
+                            class="p-button-outlined w-full p-button-secondary" 
+                            @click="openObservations(item)"
+                        />
+                        <span v-if="item.unread_count > 0" 
+                              class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 border-round-2xl shadow-1">
+                            {{ item.unread_count }}
+                        </span>
+                    </div>
+
                     <Button 
-                        label="Lançar Notas" 
+                        label="Notas" 
                         icon="pi pi-pencil" 
-                        class="p-button-outlined flex-1 p-button-sm" 
-                        v-tooltip.top="'Lançar Notas'"
+                        class="p-button-outlined p-button-sm" 
                         @click="openClassroom(item)" 
                     />
                     
                     <Button 
-                        label="Lançar Chamada" 
+                        label="Chamada" 
                         icon="pi pi-calendar-plus" 
-                        class="p-button-outlined flex-1 p-button-sm" 
-                        v-tooltip.top="'Realizar Chamada'"
+                        class="p-button-outlined p-button-sm" 
                         @click="openAttendance(item)" 
                     />
                     
                     <Button
-                        label="Planejamento Semanal" 
+                        label="Planejamento" 
                         icon="pi pi-list" 
-                        class="p-button-outlined flex-1 p-button-sm" 
-                        v-tooltip.top="'Semanário / Planejamento'"
+                        class="p-button-outlined p-button-sm col-span-2" 
                         @click="openPlanning(item)" 
                     />
                 </div>

@@ -20,23 +20,28 @@ const router = createRouter({
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
+
+                // --- PORTAL DA FAMÍLIA ---
                 {
-                    path: '/parent/dashboard',
+                    path: '/portal/familia',
                     name: 'parent-dashboard',
                     component: () => import('@/views/pages/parents/ParentDashboard.vue'),
-                    meta: { requiresAuth: true }
+                    meta: { requiresAuth: true } // Opcional: se tiver middleware de auth
                 },
                 {
-                    path: '/parent/student/:id/report-card',
+                    path: '/portal/boletim/:id',
                     name: 'parent-report-card',
-                    component: () => import('@/views/pages/parents/ReportCardView.vue'),
-                    meta: { requiresAuth: true }
+                    component: () => import('@/views/pages/parents/ReportCardView.vue')
                 },
                 {
-                    path: '/parent/student/:id/attendance',
+                    path: '/portal/frequencia/:id',
                     name: 'parent-attendance',
-                    component: () => import('@/views/pages/parents/AttendanceView.vue'),
-                    meta: { requiresAuth: true }
+                    component: () => import('@/views/pages/parents/AttendanceView.vue')
+                },
+                {
+                    path: '/portal/relatorios/:id',
+                    name: 'parent-reports',
+                    component: () => import('@/views/pages/parents/StudentReportsView.vue')
                 },
                 
                 // --- MÓDULO ACADÊMICO ---
@@ -92,6 +97,16 @@ const router = createRouter({
                     name: 'class-attendance',
                     component: () => import('@/views/pages/teacher/AttendanceClass.vue')
                 },
+                {
+                    path: '/professor/observacoes',
+                    name: 'teacher-observations',
+                    component: () => import('@/views/pages/teacher/TeacherObservations.vue')
+                },
+                {
+                    path: '/professor/relatorios',
+                    name: 'student-report',
+                    component: () => import('@/views/pages/teacher/StudentReportList.vue')
+                },                
 
                 // --- COORDENAÇÃO ---
                 {
@@ -108,7 +123,17 @@ const router = createRouter({
                     path: '/coordination/weekly-reports',
                     name: 'weekly-reports',
                     component: () => import('@/views/pages/coordination/WeeklyReportList.vue')
-                }
+                },
+                {
+                    path: '/coordenacao/justificativas',
+                    name: 'justification-review',
+                    component: () => import('@/views/pages/coordination/JustificationReview.vue')
+                },
+                {
+                    path: '/coordenacao/relatorios',
+                    name: 'student-report-approval',
+                    component: () => import('@/views/pages/coordination/StudentReportApproval.vue')
+                },
             ]
         },
         

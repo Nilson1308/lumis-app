@@ -15,12 +15,13 @@ export default defineConfig({
             resolvers: [PrimeVueResolver()]
         })
     ],
+    optimizeDeps: {
+        include: ['quill'],
+        noDiscovery: true
+    },
     resolve: {
         alias: {
             '@': fileURLToPath(new URL('./src', import.meta.url))
         }
-    },
-    optimizeDeps: {
-        noDiscovery: true
     }
 });

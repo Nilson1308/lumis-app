@@ -21,7 +21,12 @@ watchEffect(() => {
         newMenu.push({
             label: 'Portal da Família',
             items: [
-                { label: 'Meus Filhos', icon: 'pi pi-fw pi-users', to: { name: 'parent-dashboard' } }
+                { label: 'Meus Filhos', icon: 'pi pi-fw pi-users', to: { name: 'parent-dashboard' } },
+                { 
+                    label: 'Meus Dados', 
+                    icon: 'pi pi-fw pi-user-edit', 
+                    to: { name: 'parent-dashboard', query: { action: 'profile' } } 
+                }
             ]
         });
     }
@@ -42,10 +47,11 @@ watchEffect(() => {
         newMenu.push({
             label: 'Coordenação',
             items: [
+                { label: 'Justificativas de Faltas', icon: 'pi pi-fw pi-check-circle', to: { name: 'justification-review' } },
                 { label: 'Atas de Reunião', icon: 'pi pi-fw pi-file', to: { name: 'meeting-minutes' } },
                 { label: 'Relatórios Semanais', icon: 'pi pi-fw pi-list', to: { name: 'weekly-reports' } },
                 { label: 'Observação de Sala', icon: 'pi pi-fw pi-eye', to: { name: 'observations' } },
-                // O Coordenador vê os planos aqui ou via Dashboard, mas podemos por link direto
+                { label: 'Relatórios Alunos', icon: 'pi pi-fw pi-list', to: { name: 'student-report-approval' } },
                 // { label: 'Revisar Planejamentos', icon: 'pi pi-fw pi-check-square', to: { name: 'lesson-plans' } }
             ]
         });
@@ -58,6 +64,7 @@ watchEffect(() => {
             items: [
                 { label: 'Minhas Turmas', icon: 'pi pi-fw pi-book', to: { name: 'my-classes' } },
                 { label: 'Planejamento Semanal', icon: 'pi pi-fw pi-calendar-plus', to: { name: 'lesson-plans' } },
+                { label: 'Relatórios Alunos', icon: 'pi pi-fw pi-list', to: { name: 'student-report' } },
             ]
         });
     }

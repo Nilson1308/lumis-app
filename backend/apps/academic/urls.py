@@ -6,7 +6,7 @@ from .views import (
     EnrollmentViewSet, SubjectViewSet, TeacherAssignmentViewSet,
     GradeViewSet, AttendanceViewSet, AcademicPeriodViewSet,
     DashboardDataView, GuardianViewSet, LessonPlanViewSet,
-    CoordinatorViewSet
+    CoordinatorViewSet, AbsenceJustificationViewSet
 )
 
 router = DefaultRouter()
@@ -22,6 +22,7 @@ router.register(r'periods', AcademicPeriodViewSet)
 router.register(r'guardians', GuardianViewSet)
 router.register(r'lesson-plans', LessonPlanViewSet, basename='lesson-plans')
 router.register(r'coordinators', CoordinatorViewSet, basename='coordinators')
+router.register(r'justifications', AbsenceJustificationViewSet)
 
 urlpatterns = [
     path('dashboard/data/', DashboardDataView.as_view(), name='dashboard_data'),

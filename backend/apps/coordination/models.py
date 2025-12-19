@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from apps.academic.models import TeacherAssignment
+from apps.academic.models import TeacherAssignment, Student
 
 class WeeklyReport(models.Model):
     """Relatório Semanal da Coordenadora"""
@@ -22,19 +22,16 @@ class WeeklyReport(models.Model):
 class ClassObservation(models.Model):
     """Observação de Sala de Aula (Feedback ao Professor)"""
     coordinator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='observations_made', verbose_name="Coordenador")
-    # Vincula à atribuição (sabe qual professor, qual turma e qual matéria)
     assignment = models.ForeignKey(TeacherAssignment, on_delete=models.CASCADE, verbose_name="Aula Observada")
     date = models.DateField("Data da Observação")
-    
-    # Critérios de Avaliação (Exemplos baseados em formulários comuns)
     pontuality = models.IntegerField("Pontualidade (1-5)", default=3)
     class_control = models.IntegerField("Domínio de Classe (1-5)", default=3)
     planning = models.IntegerField("Cumprimento do Planejamento (1-5)", default=3)
     student_engagement = models.IntegerField("Engajamento dos Alunos (1-5)", default=3)
-    
     strong_points = models.TextField("Pontos Fortes")
     points_to_improve = models.TextField("Pontos a Melhorar")
     feedback_given = models.BooleanField("Feedback já foi passado?", default=False)
+    is_read = models.BooleanField(default=False, verbose_name="Lido pelo Professor")
 
     class Meta:
         verbose_name = "Observação de Sala"
@@ -59,3 +56,27 @@ class MeetingMinute(models.Model):
 
     def __str__(self):
         return f"Ata: {self.title} ({self.date})"
+
+class StudentReport(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Pendente de Aprovação'),
+        ('APPROVED', 'Aprovado'),
+        ('REJECTED', 'Precisa de Ajustes')
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='reports')
+    teacher = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    
+    date = models.DateField(verbose_name="Data do Relatório")
+    subject = models.CharField(max_length=200, verbose_name="Assunto")
+    content = models.TextField(verbose_name="Conteúdo")
+    
+    # Controle da Coordenação
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    visible_to_family = models.BooleanField(default=False, verbose_name="Disponível para os Pais")
+    coordinator_comment = models.TextField(null=True, blank=True, verbose_name="Comentário da Coordenação")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student.name} - {self.subject} ({self.date})"

@@ -125,7 +125,7 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="minuteDialog" :style="{ width: '700px' }" header="Registro de Reunião" :modal="true" class="p-fluid">
+            <Dialog v-model:visible="minuteDialog" :style="{ width: '800px' }" header="Registro de Reunião" :modal="true" class="p-fluid" maximizable>
                 
                 <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-8">
@@ -135,7 +135,7 @@ onMounted(() => {
                     </div>
                     <div class="col-span-12 xl:col-span-4">
                         <label class="mb-2 block font-bold">Data</label>
-                        <Calendar v-model="minute.date" dateFormat="dd/mm/yy" showIcon fluid />
+                        <DatePicker v-model="minute.date" dateFormat="dd/mm/yy" showIcon fluid />
                     </div>
                 </div>
 
@@ -147,13 +147,13 @@ onMounted(() => {
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Conteúdo / Decisões</label>
-                    <Textarea v-model="minute.content" rows="10" autoResize placeholder="Descreva o que foi discutido e decidido..." :class="{ 'p-invalid': submitted && !minute.content }" fluid />
+                    <Editor v-model="minute.content" rows="10" autoResize placeholder="Descreva o que foi discutido e decidido..." :class="{ 'p-invalid': submitted && !minute.content }" fluid editorStyle="height: 320px" />
                     <small class="p-error" v-if="submitted && !minute.content">Conteúdo obrigatório.</small>
                 </div>
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Próximos Passos / Tarefas</label>
-                    <Textarea v-model="minute.next_steps" rows="3" autoResize placeholder="O que ficou para fazer? Quem fará?" fluid />
+                    <Editor v-model="minute.next_steps" rows="3" autoResize placeholder="O que ficou para fazer? Quem fará?" fluid editorStyle="height: 320px" />
                 </div>
 
                 <template #footer>

@@ -169,6 +169,7 @@ class Attendance(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, verbose_name="Matéria")
     date = models.DateField("Data da Aula")
     present = models.BooleanField("Presente", default=True) # True = Presente, False = Falta
+    justified = models.BooleanField(default=False, verbose_name="Falta Justificada")
     period = models.ForeignKey(AcademicPeriod, on_delete=models.PROTECT, verbose_name="Período", null=True, blank=True)
 
     class Meta:
@@ -180,6 +181,36 @@ class Attendance(models.Model):
     def __str__(self):
         status = "Presente" if self.present else "Faltou"
         return f"{self.date} - {self.enrollment.student.name}: {status}"
+
+class AbsenceJustification(models.Model):
+    STATUS_CHOICES = [
+        ('PENDING', 'Em Análise'),
+        ('APPROVED', 'Aprovada'),
+        ('REJECTED', 'Rejeitada')
+    ]
+
+    attendance = models.ForeignKey(Attendance, on_delete=models.CASCADE, related_name='justification_request')
+    reason = models.TextField(verbose_name="Motivo")
+    file = models.FileField(upload_to='justifications/%Y/%m/', verbose_name="Atestado/Documento", null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
+    rejection_reason = models.TextField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.status == 'APPROVED':
+            self.attendance.justified = True
+            self.attendance.save()
+        elif self.status == 'REJECTED':
+            self.attendance.justified = False
+            self.attendance.save()
+            
+        super().save(*args, **kwargs)
 
 class LessonPlan(models.Model):
     STATUS_CHOICES = [

@@ -51,7 +51,7 @@ const openNew = () => {
         class_control: 3,
         planning: 3,
         student_engagement: 3,
-        feedback_given: false
+        feedback_given: true // Padrão: marcado (Enviar agora)
     };
     submitted.value = false;
     observationDialog.value = true;
@@ -154,7 +154,7 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="observationDialog" :style="{ width: '600px' }" header="Ficha de Observação" :modal="true" class="p-fluid">
+            <Dialog v-model:visible="observationDialog" :style="{ width: '800px' }" header="Ficha de Observação" :modal="true" class="p-fluid" maximizable>
                 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Aula Observada (Professor / Turma)</label>
@@ -174,7 +174,7 @@ onMounted(() => {
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Data</label>
-                    <Calendar v-model="observation.date" dateFormat="dd/mm/yy" showIcon fluid />
+                    <DatePicker v-model="observation.date" dateFormat="dd/mm/yy" showIcon fluid />
                 </div>
 
                 <div class="grid grid-cols-12 gap-4 mb-2">
@@ -198,17 +198,19 @@ onMounted(() => {
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Pontos Fortes</label>
-                    <Textarea v-model="observation.strong_points" rows="3" autoResize fluid />
+                    <Editor v-model="observation.strong_points" rows="3" autoResize fluid editorStyle="height: 320px"/>
                 </div>
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Pontos a Melhorar</label>
-                    <Textarea v-model="observation.points_to_improve" rows="3" autoResize fluid />
+                    <Editor v-model="observation.points_to_improve" rows="3" autoResize fluid editorStyle="height: 320px" />
                 </div>
 
-                <div class="mb-2">
+                <div class="mb-4 flex items-center">
                     <Checkbox id="feedback" v-model="observation.feedback_given" :binary="true" class="mr-2" />
-                    <label for="feedback">O feedback já foi passado ao professor?</label>
+                    <label for="feedback" class="cursor-pointer font-bold">
+                        Enviar para o professor (Caixa de Entrada)
+                    </label>
                 </div>
 
                 <template #footer>

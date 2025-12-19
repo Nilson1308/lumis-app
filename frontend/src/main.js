@@ -7,17 +7,15 @@ import Aura from '@primeuix/themes/aura';
 import PrimeVue from 'primevue/config';
 import ConfirmationService from 'primevue/confirmationservice';
 import ToastService from 'primevue/toastservice';
-import Editor from 'primevue/editor';
 
 import { updatePreset } from '@primeuix/themes';
 
 import '@/assets/tailwind.css';
 import '@/assets/styles.scss';
-import 'quill/dist/quill.snow.css';
 
 const app = createApp(App);
 
-app.component('Editor', Editor);
+// app.component('Editor', Editor);
 
 app.use(createPinia());
 app.use(router);

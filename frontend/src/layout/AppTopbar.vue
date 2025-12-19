@@ -35,6 +35,7 @@ const userRole = computed(() => {
     if (authStore.user?.is_superuser) return 'Administrador';
     if (authStore.isCoordinator) return 'Coordenação';
     if (authStore.isTeacher) return 'Professor';
+    if (authStore.isGuardian) return 'Responsável';
     return 'Colaborador';
 });
 </script>
@@ -59,13 +60,11 @@ const userRole = computed(() => {
                 </button>
             </div>
 
-            <div class="layout-topbar-menu hidden lg:block">
-                <div class="layout-topbar-menu-content">
-                    <button type="button" class="layout-topbar-action" @click="toggleProfile">
-                        <i class="pi pi-user"></i>
-                        <span>Profile</span>
-                    </button>
-                </div>
+            <div class="layout-topbar-menu-content">
+                <button type="button" class="layout-topbar-action" @click="toggleProfile">
+                    <i class="pi pi-user"></i>
+                    <span>Profile</span>
+                </button>
             </div>
         </div>
 

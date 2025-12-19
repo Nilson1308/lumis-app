@@ -151,8 +151,8 @@ onMounted(() => {
         <div class="card">
             <Toast />
 
-            <div class="flex flex-column md:flex-row justify-between items-center mb-4" v-if="assignment">
-                <div class="flex items-center mb-3 md:mb-0">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4" v-if="assignment">
+                <div class="flex mb-3 md:mb-0">
                     <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="goBack" />
                     <div>
                         <span class="block text-xl font-bold">{{ assignment.subject_name }}</span>
@@ -209,20 +209,20 @@ onMounted(() => {
             </DataTable>
 
             <Dialog v-model:visible="gradeDialog" header="Lançar Nota" :modal="true" :style="{ width: '400px' }">
-                <div class="p-fluid grid formgrid">
-                    <div class="field col-12">
+                <div class="grid grid-cols-12 gap-6">
+                    <div class="col-span-12 lg:col-span-12 xl:col-span-12">
                         <label>Nome da Avaliação</label>
-                        <InputText v-model="gradeForm.name" placeholder="Ex: Trabalho, Prova..." autofocus />
+                        <InputText v-model="gradeForm.name" placeholder="Ex: Trabalho, Prova..." autofocus fluid />
                     </div>
                     
-                    <div class="field col-6">
+                    <div class="col-span-12 lg:col-span-6 xl:col-span-6">
                         <label>Nota (0-10)</label>
-                        <InputNumber v-model="gradeForm.value" mode="decimal" :min="0" :max="10" :minFractionDigits="1" :maxFractionDigits="2" showButtons />
+                        <InputNumber v-model="gradeForm.value" mode="decimal" :min="0" :max="10" :minFractionDigits="1" :maxFractionDigits="2" showButtons fluid />
                     </div>
 
-                    <div class="field col-6">
+                    <div class="col-span-12 lg:col-span-6 xl:col-span-6">
                         <label>Peso</label>
-                        <InputNumber v-model="gradeForm.weight" mode="decimal" :min="0.1" :max="10" :step="0.5" showButtons suffix="x" />
+                        <InputNumber v-model="gradeForm.weight" mode="decimal" :min="0.1" :max="10" :step="0.5" showButtons suffix="x" fluid />
                     </div>
                 </div>
                 <template #footer>

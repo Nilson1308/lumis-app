@@ -4,55 +4,49 @@ import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
 const toast = useToast();
-
-const FilterMatchMode = {
-    STARTS_WITH: 'startsWith',
-    CONTAINS: 'contains',
-    NOT_CONTAINS: 'notContains',
-    ENDS_WITH: 'endsWith',
-    EQUALS: 'equals',
-    NOT_EQUALS: 'notEquals',
-    IN: 'in',
-    LESS_THAN: 'lt',
-    LESS_THAN_OR_EQUAL_TO: 'lte',
-    GREATER_THAN: 'gt',
-    GREATER_THAN_OR_EQUAL_TO: 'gte',
-    BETWEEN: 'between',
-    DATE_IS: 'dateIs',
-    DATE_IS_NOT: 'dateIsNot',
-    DATE_BEFORE: 'dateBefore',
-    DATE_AFTER: 'dateAfter'
-};
-
 const students = ref([]);
-const guardians = ref([]); // Lista de opções para o Dropdown
+const guardians = ref([]);
 const student = ref({});
 const studentDialog = ref(false);
 const deleteStudentDialog = ref(false);
 const loading = ref(true);
 const submitted = ref(false);
 
-const filters = ref({
-    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+// --- VARIÁVEIS PARA PAGINAÇÃO SERVER-SIDE ---
+const totalRecords = ref(0);
+const lazyParams = ref({
+    page: 1,
+    rows: 10
 });
 
-// --- CARREGAR DADOS ---
+const filters = ref({
+    global: { value: null, matchMode: 'contains' },
+});
+
+// --- CARREGAR DADOS (COM PAGINAÇÃO REAL) ---
 const loadData = async () => {
     loading.value = true;
     try {
-        // Busca Alunos
-        const resStudents = await api.get('students/?page_size=100');
-        students.value = resStudents.data.results;
-
-        // Busca Responsáveis
-        const resGuardians = await api.get('guardians/?page_size=1000');
-        const listaBruta = resGuardians.data.results || resGuardians.data;
+        // 1. Monta a URL com a página correta
+        const page = lazyParams.value.page;
+        const rows = lazyParams.value.rows;
         
-        // Mapeamento: Cria o campo 'label' para a LISTA DE OPÇÕES
-        guardians.value = listaBruta.map(g => ({
-            ...g, // Mantém id, cpf, email, etc
-            label: g.name ? `${g.name} ${g.cpf ? '(' + g.cpf + ')' : ''}` : `Sem Nome (ID: ${g.id})`
-        }));
+        // Ex: students/?page=1&page_size=10
+        const resStudents = await api.get(`students/?page=${page}&page_size=${rows}`);
+        
+        // 2. Atualiza a tabela e o total de registros (para o paginador saber quantas páginas existem)
+        students.value = resStudents.data.results; 
+        totalRecords.value = resStudents.data.count; 
+
+        // 3. Busca Responsáveis (apenas na primeira carga ou se estiver vazio)
+        if (guardians.value.length === 0) {
+            const resGuardians = await api.get('guardians/?page_size=1000');
+            const listaBruta = resGuardians.data.results || resGuardians.data;
+            guardians.value = listaBruta.map(g => ({
+                ...g,
+                label: g.name ? `${g.name} ${g.cpf ? '(' + g.cpf + ')' : ''}` : `ID: ${g.id}`
+            }));
+        }
 
     } catch (e) {
         console.error(e);
@@ -62,40 +56,30 @@ const loadData = async () => {
     }
 };
 
-// --- BUSCA DE CEP (VIACEP) ---
+// Evento disparado ao mudar de página na tabela
+const onPage = (event) => {
+    lazyParams.value.page = event.page + 1; // PrimeVue começa em 0, Django em 1
+    lazyParams.value.rows = event.rows;
+    loadData();
+};
+
 const searchCep = async () => {
     const cep = student.value.zip_code ? student.value.zip_code.replace(/\D/g, '') : '';
-
     if (cep.length !== 8) return;
-
     try {
         const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
         const data = await response.json();
-
-        if (data.erro) {
-            toast.add({ severity: 'warn', summary: 'Atenção', detail: 'CEP não encontrado.', life: 3000 });
-            return;
+        if (!data.erro) {
+            student.value.street = data.logradouro;
+            student.value.neighborhood = data.bairro;
+            student.value.city = data.localidade;
+            student.value.state = data.uf;
         }
-
-        student.value.street = data.logradouro;
-        student.value.neighborhood = data.bairro;
-        student.value.city = data.localidade;
-        student.value.state = data.uf;
-        
-        toast.add({ severity: 'info', summary: 'Endereço', detail: 'Endereço carregado!', life: 3000 });
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao buscar CEP.', life: 3000 });
-    }
+    } catch (error) { console.error(error); }
 };
 
-// --- AÇÕES ---
 const openNew = () => {
-    student.value = {
-        nationality: 'Brasileira',
-        city: 'Mogi das Cruzes',
-        state: 'SP',
-        guardians: [] // Array vazio obrigatório
-    };
+    student.value = { nationality: 'Brasileira', city: 'Mogi das Cruzes', state: 'SP', guardians: [] };
     submitted.value = false;
     studentDialog.value = true;
 };
@@ -103,17 +87,20 @@ const openNew = () => {
 const editStudent = (prod) => {
     student.value = { ...prod };
     
-    // Ajuste de Data
+    // Ajuste Data
     if (student.value.birth_date) {
         const parts = student.value.birth_date.split('-');
         student.value.birth_date = new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    // --- A CORREÇÃO SIMPLIFICADA ---
-    // Transforma a lista de objetos [{id:1, name: '...'}, {id:2...}] 
-    // em uma lista simples de IDs: [1, 2]
+    // --- CORREÇÃO DO MULTISELECT ---
+    // Verifica se os itens SÃO objetos antes de tentar acessar .id
+    // Se a API já mandou [1, 5], não fazemos nada.
     if (student.value.guardians && Array.isArray(student.value.guardians)) {
-        student.value.guardians = student.value.guardians.map(g => g.id);
+        if (student.value.guardians.length > 0 && typeof student.value.guardians[0] === 'object') {
+            student.value.guardians = student.value.guardians.map(g => g.id);
+        }
+        // Se já forem números, mantém como está.
     } else {
         student.value.guardians = [];
     }
@@ -126,21 +113,16 @@ const confirmDeleteStudent = (prod) => {
     deleteStudentDialog.value = true;
 };
 
-// --- SALVAR ---
 const saveStudent = async () => {
     submitted.value = true;
-
     if (student.value.name && student.value.registration_number) {
-        // Clona para não afetar a tela visualmente enquanto salva
         const payload = { ...student.value };
         
-        // 1. Formata Data (YYYY-MM-DD)
         if (payload.birth_date instanceof Date) {
             payload.birth_date = payload.birth_date.toISOString().split('T')[0];
         }
 
-        // 2. Extrai apenas os IDs dos Responsáveis para enviar ao Backend
-        // O componente usa Objetos inteiros, mas a API espera [1, 2, 5]
+        // Garante envio apenas de IDs
         if (payload.guardians && payload.guardians.length > 0) {
             payload.guardians = payload.guardians.map(g => (g.id ? g.id : g));
         }
@@ -148,16 +130,15 @@ const saveStudent = async () => {
         try {
             if (student.value.id) {
                 await api.put(`students/${student.value.id}/`, payload);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno atualizado', life: 3000 });
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado!' });
             } else {
                 await api.post('students/', payload);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno criado', life: 3000 });
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado!' });
             }
             studentDialog.value = false;
-            loadData();
+            loadData(); // Recarrega a página atual
         } catch (error) {
-            console.error(error);
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar aluno.', life: 3000 });
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.' });
         }
     }
 };
@@ -166,11 +147,10 @@ const deleteStudent = async () => {
     try {
         await api.delete(`students/${student.value.id}/`);
         deleteStudentDialog.value = false;
-        student.value = {};
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno removido', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido!' });
         loadData();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao remover', life: 3000 });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao remover.' });
     }
 };
 
@@ -191,21 +171,36 @@ onMounted(() => {
                 </template>
             </Toolbar>
 
-            <DataTable :value="students" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10">
+            <DataTable 
+                :value="students" 
+                :loading="loading" 
+                responsiveLayout="scroll" 
+                
+                :paginator="true" 
+                :rows="10"
+                :totalRecords="totalRecords"
+                :lazy="true"
+                @page="onPage"
+                
+                :filters="filters"
+            >
                 <template #header>
                     <div class="flex flex-wrap gap-2 items-center justify-between">
                         <h4 class="m-0">Listagem de Alunos</h4>
-                        <IconField>
-                            <InputIcon>
-                                <i class="pi pi-search" />
-                            </InputIcon>
-                            <InputText v-model="filters['global'].value" placeholder="Buscar..." />
-                        </IconField>
+                        <div class="flex gap-2">
+                            <IconField>
+                                <InputIcon>
+                                    <i class="pi pi-search" />
+                                </InputIcon>
+                                <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
+                            </IconField>
+                            <Button icon="pi pi-refresh" class="p-button-rounded p-button-text" @click="loadData" />
+                        </div>
                     </div>
                 </template>
                 
-                <Column field="registration_number" header="Matrícula" sortable></Column>
-                <Column field="name" header="Nome" sortable></Column>
+                <Column field="registration_number" header="Matrícula"></Column>
+                <Column field="name" header="Nome"></Column>
                 <Column field="birth_date" header="Nascimento">
                     <template #body="slotProps">
                         <span v-if="slotProps.data.birth_date">
@@ -223,7 +218,7 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="studentDialog" :style="{ width: '800px' }" header="Prontuário do Aluno" :modal="true" class="p-fluid">
+            <Dialog v-model:visible="studentDialog" :style="{ width: '800px' }" header="Prontuário do Aluno" :modal="true" class="p-fluid" maximizable>
                 
                 <TabView>
                     
@@ -241,7 +236,7 @@ onMounted(() => {
                             </div>
                             <div class="col-span-12 xl:col-span-6">
                                 <label class="block font-bold mb-3">Data de Nascimento</label>
-                                <Calendar v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
+                                <DatePicker v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
                             </div>
                             <div class="col-span-12 xl:col-span-4">
                                 <label class="block font-bold mb-3">Gênero</label>
@@ -298,11 +293,11 @@ onMounted(() => {
                     <TabPanel header="Saúde & Emergência">
                         <div class="mb-2">
                             <label class="block font-bold mb-3 text-red-500">Alergias</label>
-                            <Textarea v-model="student.allergies" rows="3" autoResize placeholder="Lista de alergias..." fluid />
+                            <Editor v-model="student.allergies" rows="3" autoResize placeholder="Lista de alergias..." fluid editorStyle="height: 320px" />
                         </div>
                         <div class="mb-2">
                             <label class="block font-bold mb-3">Medicamentos Contínuos</label>
-                            <Textarea v-model="student.medications" rows="3" autoResize fluid />
+                            <Editor v-model="student.medications" rows="3" autoResize fluid editorStyle="height: 320px" />
                         </div>
                         <div class="mb-2">
                             <label class="block font-bold mb-3">Contato de Emergência (Nome e Telefone)</label>
@@ -318,7 +313,8 @@ onMounted(() => {
                                 id="guardians"
                                 v-model="student.guardians" 
                                 :options="guardians" 
-                                optionLabel="label" 
+                                optionLabel="label"
+                                optionValue="id"
                                 dataKey="id"
                                 placeholder="Busque pelo nome ou CPF..." 
                                 display="chip" 

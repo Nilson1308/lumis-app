@@ -43,8 +43,8 @@ const handleLogin = async () => {
 
 <template>
     <div class="bg-surface-50 dark:bg-surface-950 flex items-center justify-center min-h-screen min-w-[100vw] overflow-hidden">
-        <div class="flex flex-col items-center justify-center">
-            <div class="w-full bg-surface-0 dark:bg-surface-900 p-12" style="border-radius: 20px; min-width: 450px">
+        <div class="w-full flex flex-col items-center justify-center">
+            <div class="w-100 bg-surface-0 dark:bg-surface-900 p-12" style="border-radius: 20px;">
                 <div class="text-center mb-5">
                     <img src="@/assets/logo-lumis.png" alt="Lumis Logo" class="mb-2 mx-auto" style="height: 90px;">
                     <small class="text-muted-color font-medium">Faça login para acessar o painel</small>

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import WeeklyReport, ClassObservation, MeetingMinute
+from .models import WeeklyReport, ClassObservation, MeetingMinute, StudentReport
 
 class WeeklyReportSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='author.get_full_name', read_only=True)
@@ -29,3 +29,12 @@ class MeetingMinuteSerializer(serializers.ModelSerializer):
         model = MeetingMinute
         fields = '__all__'
         read_only_fields = ['created_by']
+
+class StudentReportSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
+
+    class Meta:
+        model = StudentReport
+        fields = '__all__'
+        read_only_fields = ['teacher', 'created_at']
