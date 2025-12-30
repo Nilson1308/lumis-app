@@ -13,6 +13,8 @@ import { updatePreset } from '@primeuix/themes';
 import '@/assets/tailwind.css';
 import '@/assets/styles.scss';
 
+import 'quill/dist/quill.snow.css';
+
 const app = createApp(App);
 
 // app.component('Editor', Editor);
