@@ -2,10 +2,16 @@ from django.contrib import admin
 from .models import (
     Segment, ClassRoom, Subject, Enrollment, 
     TeacherAssignment, Student, Guardian, 
-    Grade, Attendance, AcademicPeriod, LessonPlan
+    Grade, Attendance, AcademicPeriod, LessonPlan,
+    ExtraActivity
 )
 
 # --- CONFIGURAÇÕES AUXILIARES ---
+
+@admin.register(ExtraActivity)
+class ExtraActivityAdmin(admin.ModelAdmin):
+    list_display = ('name', 'price')
+    search_fields = ('name',)
 
 @admin.register(AcademicPeriod)
 class AcademicPeriodAdmin(admin.ModelAdmin):
@@ -54,7 +60,7 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(Guardian)
 class GuardianAdmin(admin.ModelAdmin):
-    list_display = ('name', 'cpf', 'phone', 'email')
+    list_display = ('name', 'cpf', 'phone', 'secondary_phone', 'email')
     search_fields = ('name', 'cpf', 'email')
 
 @admin.register(Student)
@@ -72,6 +78,9 @@ class StudentAdmin(admin.ModelAdmin):
         }),
         ('Documentação Civil', {
             'fields': ('birth_date', 'gender', 'cpf', 'rg', 'nationality')
+        }),
+        ('Vida Escolar & Rotina', {
+            'fields': ('period', 'is_full_time', 'meals', 'extra_activities')
         }),
         ('Endereço', {
             'fields': ('zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state')

@@ -153,10 +153,16 @@ onMounted(() => {
                     </div>
                 </div>
 
-                <div class="mb-2">
-                    <label class="block font-bold mb-3">Celular / WhatsApp</label>
-                    <InputMask v-model="guardian.phone" mask="(99) 99999-9999" placeholder="(11) 99999-9999" :class="{ 'p-invalid': submitted && !guardian.phone }" fluid />
-                    <small class="p-error" v-if="submitted && !guardian.phone">Telefone obrigatório.</small>
+                <div class="grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="block font-bold mb-3">Celular / WhatsApp</label>
+                        <InputMask v-model="guardian.phone" mask="(99) 99999-9999" placeholder="(11) 99999-9999" :class="{ 'p-invalid': submitted && !guardian.phone }" fluid />
+                        <small class="p-error" v-if="submitted && !guardian.phone">Telefone obrigatório.</small>
+                    </div>
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="block font-bold mb-3">Telefone Secundário</label>
+                        <InputMask v-model="guardian.secondary_phone" mask="(99) 99999-9999" placeholder="(11) 99999-9999" fluid />
+                    </div>
                 </div>
 
                 <div class="mb-2">

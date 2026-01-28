@@ -42,6 +42,7 @@ class Guardian(models.Model):
     rg = models.CharField("RG", max_length=20, blank=True, null=True)
     email = models.EmailField("Email", blank=True, null=True) 
     phone = models.CharField("Celular/WhatsApp", max_length=20)
+    secondary_phone = models.CharField("Telefone Secundário / Recado", max_length=20, blank=True, null=True)
     profession = models.CharField("Profissão", max_length=100, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)

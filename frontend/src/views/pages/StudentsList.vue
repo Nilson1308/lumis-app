@@ -23,7 +23,7 @@ const lazyParams = ref({
 
 // Filtro Local para Datatable (O Backend usa ?search=, aqui é só visual se quiser, mas vamos focar no backend)
 const filters = ref({
-    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    global: { value: '' }
 });
 
 // Opções para Selects
@@ -46,15 +46,17 @@ const loadData = async () => {
         const page = lazyParams.value.page;
         const rows = lazyParams.value.rows;
         
-        // Se tiver termo de busca, adiciona na query
         let query = `students/?page=${page}&page_size=${rows}`;
-        if (filters.value.global.value) {
-            query += `&search=${filters.value.global.value}`;
+        
+        // Verifica se existe valor e se não é só espaço em branco
+        const searchValue = filters.value.global.value;
+        if (searchValue && searchValue.trim() !== '') {
+            query += `&search=${searchValue}`;
         }
 
         const resStudents = await api.get(query);
         students.value = resStudents.data.results; 
-        totalRecords.value = resStudents.data.count; 
+        totalRecords.value = resStudents.data.count;
 
         // Carrega auxiliares (Guardians e Activities) apenas uma vez
         if (guardians.value.length === 0) {
@@ -67,7 +69,7 @@ const loadData = async () => {
         }
 
         if (extraActivities.value.length === 0) {
-            const resActivities = await api.get('academic/extra-activities/'); // Ajuste a rota se necessário
+            const resActivities = await api.get('extra-activities/'); // Ajuste a rota se necessário
             extraActivities.value = resActivities.data.results || resActivities.data;
         }
 
@@ -269,9 +271,15 @@ onMounted(() => {
                                 <InputIcon>
                                     <i class="pi pi-search" />
                                 </InputIcon>
-                                <InputText v-model="filters['global'].value" placeholder="Buscar..." @keydown.enter="onSearch" />
+                                <InputText 
+                                    v-model="filters.global.value" 
+                                    placeholder="Buscar por Nome, Matrícula ou CPF..." 
+                                    @keydown.enter="onSearch"
+                                    style="width: 300px" 
+                                />
                             </IconField>
-                            <Button icon="pi pi-refresh" class="p-button-rounded p-button-text" @click="loadData" />
+                            <Button icon="pi pi-search" class="p-button-rounded p-button-text ml-2" @click="onSearch" v-tooltip="'Pesquisar'" />
+                            <Button icon="pi pi-refresh" class="p-button-rounded p-button-text" @click="loadData" v-tooltip="'Recarregar Tabela'" />
                         </div>
                     </div>
                 </template>
