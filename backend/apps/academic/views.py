@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions
+from rest_framework import viewsets, permissions, filters
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -9,14 +9,16 @@ from rest_framework.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Avg, Q
 from django.contrib.auth import get_user_model
+from django_filters.rest_framework import DjangoFilterBackend
 User = get_user_model()
-from .models import Segment, ClassRoom, Guardian, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification
+from .models import Segment, ClassRoom, Guardian, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
     EnrollmentSerializer, SubjectSerializer, TeacherAssignmentSerializer,
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
-    GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer
+    GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
+    ExtraActivitySerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 
@@ -54,11 +56,17 @@ class GuardianViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         return Response({"detail": "Perfil não encontrado"}, status=404)
 
+class ExtraActivityViewSet(viewsets.ModelViewSet):
+    queryset = ExtraActivity.objects.all()
+    serializer_class = ExtraActivitySerializer
+
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().order_by('name')
     serializer_class = StudentSerializer
     pagination_class = FlexiblePagination
-    search_fields = ['name', 'registration_number']
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    search_fields = ['name', 'registration_number', 'cpf']
+    filterset_fields = ['period', 'is_full_time']
 
     def get_permissions(self):
         # Se for editar, exige ser o responsável do aluno

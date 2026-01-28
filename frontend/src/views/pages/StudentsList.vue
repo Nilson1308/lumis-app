@@ -1,11 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
+import { FilterMatchMode } from '@primevue/core/api'; // Certifique-se que o FilterMatchMode é importado
 import api from '@/service/api';
 
 const toast = useToast();
 const students = ref([]);
 const guardians = ref([]);
+const extraActivities = ref([]); // Lista de atividades
 const student = ref({});
 const studentDialog = ref(false);
 const deleteStudentDialog = ref(false);
@@ -19,26 +21,42 @@ const lazyParams = ref({
     rows: 10
 });
 
+// Filtro Local para Datatable (O Backend usa ?search=, aqui é só visual se quiser, mas vamos focar no backend)
 const filters = ref({
-    global: { value: null, matchMode: 'contains' },
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
 });
 
-// --- CARREGAR DADOS (COM PAGINAÇÃO REAL) ---
+// Opções para Selects
+const periodOptions = ref([
+    { label: 'Manhã', value: 'MORNING' },
+    { label: 'Tarde', value: 'AFTERNOON' }
+]);
+
+const mealOptions = ref([
+    { label: 'Não Optante', value: 'NONE' },
+    { label: 'Almoço', value: 'LUNCH' },
+    { label: 'Lanche', value: 'SNACK' },
+    { label: 'Almoço + Lanche', value: 'BOTH' }
+]);
+
+// --- CARREGAR DADOS ---
 const loadData = async () => {
     loading.value = true;
     try {
-        // 1. Monta a URL com a página correta
         const page = lazyParams.value.page;
         const rows = lazyParams.value.rows;
         
-        // Ex: students/?page=1&page_size=10
-        const resStudents = await api.get(`students/?page=${page}&page_size=${rows}`);
-        
-        // 2. Atualiza a tabela e o total de registros (para o paginador saber quantas páginas existem)
+        // Se tiver termo de busca, adiciona na query
+        let query = `students/?page=${page}&page_size=${rows}`;
+        if (filters.value.global.value) {
+            query += `&search=${filters.value.global.value}`;
+        }
+
+        const resStudents = await api.get(query);
         students.value = resStudents.data.results; 
         totalRecords.value = resStudents.data.count; 
 
-        // 3. Busca Responsáveis (apenas na primeira carga ou se estiver vazio)
+        // Carrega auxiliares (Guardians e Activities) apenas uma vez
         if (guardians.value.length === 0) {
             const resGuardians = await api.get('guardians/?page_size=1000');
             const listaBruta = resGuardians.data.results || resGuardians.data;
@@ -46,6 +64,11 @@ const loadData = async () => {
                 ...g,
                 label: g.name ? `${g.name} ${g.cpf ? '(' + g.cpf + ')' : ''}` : `ID: ${g.id}`
             }));
+        }
+
+        if (extraActivities.value.length === 0) {
+            const resActivities = await api.get('academic/extra-activities/'); // Ajuste a rota se necessário
+            extraActivities.value = resActivities.data.results || resActivities.data;
         }
 
     } catch (e) {
@@ -56,12 +79,17 @@ const loadData = async () => {
     }
 };
 
-// Evento disparado ao mudar de página na tabela
 const onPage = (event) => {
-    lazyParams.value.page = event.page + 1; // PrimeVue começa em 0, Django em 1
+    lazyParams.value.page = event.page + 1;
     lazyParams.value.rows = event.rows;
     loadData();
 };
+
+const onSearch = () => {
+    // Reseta para a primeira página ao buscar
+    lazyParams.value.page = 1;
+    loadData();
+}
 
 const searchCep = async () => {
     const cep = student.value.zip_code ? student.value.zip_code.replace(/\D/g, '') : '';
@@ -79,7 +107,16 @@ const searchCep = async () => {
 };
 
 const openNew = () => {
-    student.value = { nationality: 'Brasileira', city: 'Mogi das Cruzes', state: 'SP', guardians: [] };
+    student.value = { 
+        nationality: 'Brasileira', 
+        city: 'Mogi das Cruzes', 
+        state: 'SP', 
+        guardians: [],
+        period: 'AFTERNOON',
+        is_full_time: false,
+        meals: 'NONE',
+        extra_activities: []
+    };
     submitted.value = false;
     studentDialog.value = true;
 };
@@ -87,22 +124,25 @@ const openNew = () => {
 const editStudent = (prod) => {
     student.value = { ...prod };
     
-    // Ajuste Data
     if (student.value.birth_date) {
         const parts = student.value.birth_date.split('-');
         student.value.birth_date = new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    // --- CORREÇÃO DO MULTISELECT ---
-    // Verifica se os itens SÃO objetos antes de tentar acessar .id
-    // Se a API já mandou [1, 5], não fazemos nada.
+    // Tratamento Guardians (Array de IDs)
     if (student.value.guardians && Array.isArray(student.value.guardians)) {
         if (student.value.guardians.length > 0 && typeof student.value.guardians[0] === 'object') {
             student.value.guardians = student.value.guardians.map(g => g.id);
         }
-        // Se já forem números, mantém como está.
     } else {
         student.value.guardians = [];
+    }
+
+    // Tratamento Extra Activities (Array de IDs - se vier details do backend)
+    if (student.value.extra_activities_details) {
+        student.value.extra_activities = student.value.extra_activities_details.map(a => a.id);
+    } else if (!student.value.extra_activities) {
+        student.value.extra_activities = [];
     }
     
     studentDialog.value = true;
@@ -113,31 +153,70 @@ const confirmDeleteStudent = (prod) => {
     deleteStudentDialog.value = true;
 };
 
+const onFileSelect = (event, field) => {
+    // Guarda o arquivo selecionado no objeto student
+    student.value[field] = event.files[0];
+};
+
 const saveStudent = async () => {
     submitted.value = true;
     if (student.value.name && student.value.registration_number) {
-        const payload = { ...student.value };
         
-        if (payload.birth_date instanceof Date) {
-            payload.birth_date = payload.birth_date.toISOString().split('T')[0];
+        // --- USANDO FORMDATA PARA ARQUIVOS ---
+        const formData = new FormData();
+        
+        // Dados Simples
+        const simpleFields = [
+            'name', 'registration_number', 'birth_date', 'gender', 'cpf', 'rg', 'nationality',
+            'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
+            'allergies', 'medications', 'emergency_contact',
+            'period', 'meals', 'is_full_time' // Novos campos
+        ];
+
+        simpleFields.forEach(field => {
+            let val = student.value[field];
+            if (field === 'birth_date' && val instanceof Date) {
+                val = val.toISOString().split('T')[0];
+            }
+            // Booleanos precisam ser string 'true'/'false' ou 1/0 para o Django Multipart
+            if (field === 'is_full_time') {
+                val = val ? 'true' : 'false';
+            }
+            if (val !== undefined && val !== null) {
+                formData.append(field, val);
+            }
+        });
+
+        // Arrays (ManyToMany)
+        if (student.value.guardians) {
+            student.value.guardians.forEach(id => formData.append('guardians', id));
+        }
+        if (student.value.extra_activities) {
+            student.value.extra_activities.forEach(id => formData.append('extra_activities', id));
         }
 
-        // Garante envio apenas de IDs
-        if (payload.guardians && payload.guardians.length > 0) {
-            payload.guardians = payload.guardians.map(g => (g.id ? g.id : g));
+        // Arquivos (Só anexa se for objeto File novo)
+        if (student.value.medical_report instanceof File) {
+            formData.append('medical_report', student.value.medical_report);
+        }
+        if (student.value.prescription instanceof File) {
+            formData.append('prescription', student.value.prescription);
         }
 
         try {
+            const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+            
             if (student.value.id) {
-                await api.put(`students/${student.value.id}/`, payload);
+                await api.patch(`students/${student.value.id}/`, formData, config);
                 toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado!' });
             } else {
-                await api.post('students/', payload);
+                await api.post('students/', formData, config);
                 toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado!' });
             }
             studentDialog.value = false;
-            loadData(); // Recarrega a página atual
+            loadData();
         } catch (error) {
+            console.error(error);
             toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.' });
         }
     }
@@ -175,13 +254,11 @@ onMounted(() => {
                 :value="students" 
                 :loading="loading" 
                 responsiveLayout="scroll" 
-                
                 :paginator="true" 
                 :rows="10"
                 :totalRecords="totalRecords"
                 :lazy="true"
                 @page="onPage"
-                
                 :filters="filters"
             >
                 <template #header>
@@ -192,7 +269,7 @@ onMounted(() => {
                                 <InputIcon>
                                     <i class="pi pi-search" />
                                 </InputIcon>
-                                <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
+                                <InputText v-model="filters['global'].value" placeholder="Buscar..." @keydown.enter="onSearch" />
                             </IconField>
                             <Button icon="pi pi-refresh" class="p-button-rounded p-button-text" @click="loadData" />
                         </div>
@@ -201,6 +278,19 @@ onMounted(() => {
                 
                 <Column field="registration_number" header="Matrícula"></Column>
                 <Column field="name" header="Nome"></Column>
+                
+                <Column field="period" header="Período">
+                    <template #body="slotProps">
+                        <Tag :value="slotProps.data.period === 'MORNING' ? 'Manhã' : 'Tarde'" 
+                             :severity="slotProps.data.period === 'MORNING' ? 'info' : 'warning'" />
+                    </template>
+                </Column>
+                <Column field="is_full_time" header="Integral">
+                    <template #body="slotProps">
+                        <i class="pi" :class="{'pi-check-circle text-green-500': slotProps.data.is_full_time, 'pi-times-circle text-gray-400': !slotProps.data.is_full_time}"></i>
+                    </template>
+                </Column>
+
                 <Column field="birth_date" header="Nascimento">
                     <template #body="slotProps">
                         <span v-if="slotProps.data.birth_date">
@@ -208,7 +298,6 @@ onMounted(() => {
                         </span>
                     </template>
                 </Column>
-                <Column field="emergency_contact" header="Contato Emergência"></Column>
                 
                 <Column header="Ações">
                     <template #body="slotProps">
@@ -218,117 +307,176 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="studentDialog" :style="{ width: '800px' }" header="Prontuário do Aluno" :modal="true" class="p-fluid" maximizable>
+            <Dialog v-model:visible="studentDialog" :style="{ width: '900px' }" header="Prontuário do Aluno" :modal="true" class="p-fluid" maximizable>
                 
-                <TabView>
+                <Tabs value="0">
+                    <TabList>
+                        <Tab value="0">Dados Pessoais</Tab>
+                        <Tab value="1">Escolar & Rotina</Tab>
+                        <Tab value="2">Endereço</Tab>
+                        <Tab value="3">Saúde & Arquivos</Tab>
+                        <Tab value="4">Responsáveis</Tab>
+                    </TabList>
                     
-                    <TabPanel header="Dados Pessoais">
-                        <div class="mb-2">
-                            <label for="name" class="block font-bold mb-3">Nome Completo</label>
-                            <InputText id="name" v-model.trim="student.name" required="true" autofocus :class="{ 'p-invalid': submitted && !student.name }" fluid />
-                            <small class="p-error" v-if="submitted && !student.name">O nome é obrigatório.</small>
-                        </div>
+                    <TabPanels>
+                        <TabPanel value="0">
+                            <div class="mb-2">
+                                <label for="name" class="block font-bold mb-3">Nome Completo</label>
+                                <InputText id="name" v-model.trim="student.name" required="true" autofocus :class="{ 'p-invalid': submitted && !student.name }" fluid />
+                                <small class="p-error" v-if="submitted && !student.name">O nome é obrigatório.</small>
+                            </div>
 
-                        <div class="grid grid-cols-12 gap-4 mb-2">
-                            <div class="col-span-12 xl:col-span-6">
-                                <label class="block font-bold mb-3">Matrícula</label>
-                                <InputText v-model.trim="student.registration_number" required="true" :class="{ 'p-invalid': submitted && !student.registration_number }" fluid />
+                            <div class="grid grid-cols-12 gap-4 mb-2">
+                                <div class="col-span-12 xl:col-span-6">
+                                    <label class="block font-bold mb-3">Matrícula</label>
+                                    <InputText v-model.trim="student.registration_number" required="true" :class="{ 'p-invalid': submitted && !student.registration_number }" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-6">
+                                    <label class="block font-bold mb-3">Data de Nascimento</label>
+                                    <DatePicker v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-4">
+                                    <label class="block font-bold mb-3">Gênero</label>
+                                    <Dropdown v-model="student.gender" :options="[{label:'Masculino', value:'M'}, {label:'Feminino', value:'F'}]" optionLabel="label" optionValue="value" placeholder="Selecione" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-4">
+                                    <label class="block font-bold mb-3">CPF</label>
+                                    <InputMask v-model="student.cpf" mask="999.999.999-99" placeholder="000.000.000-00" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-4">
+                                    <label class="block font-bold mb-3">RG</label>
+                                    <InputText v-model="student.rg" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-12">
+                                    <label class="block font-bold mb-3">Nacionalidade</label>
+                                    <InputText v-model="student.nationality" fluid />
+                                </div>
                             </div>
-                            <div class="col-span-12 xl:col-span-6">
-                                <label class="block font-bold mb-3">Data de Nascimento</label>
-                                <DatePicker v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-4">
-                                <label class="block font-bold mb-3">Gênero</label>
-                                <Dropdown v-model="student.gender" :options="[{label:'Masculino', value:'M'}, {label:'Feminino', value:'F'}]" optionLabel="label" optionValue="value" placeholder="Selecione" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-4">
-                                <label class="block font-bold mb-3">CPF</label>
-                                <InputMask v-model="student.cpf" mask="999.999.999-99" placeholder="000.000.000-00" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-4">
-                                <label class="block font-bold mb-3">RG</label>
-                                <InputText v-model="student.rg" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-12">
-                                <label class="block font-bold mb-3">Nacionalidade</label>
-                                <InputText v-model="student.nationality" fluid />
-                            </div>
-                        </div>
-                    </TabPanel>
+                        </TabPanel>
 
-                    <TabPanel header="Endereço">
-                        <div class="grid grid-cols-12 gap-4 mb-2">
-                            <div class="col-span-12 xl:col-span-4">
-                                <label class="block font-bold mb-3">CEP <i class="pi pi-search text-primary ml-1" v-tooltip="'Digite o CEP para buscar'"></i></label>
-                                <InputMask v-model="student.zip_code" mask="99999-999" @blur="searchCep" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-8">
-                                <label class="block font-bold mb-3">Logradouro (Rua/Av)</label>
-                                <InputText v-model="student.street" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-4">
-                                <label class="block font-bold mb-3">Número</label>
-                                <InputText id="number" v-model="student.number" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-8">
-                                <label class="block font-bold mb-3">Complemento</label>
-                                <InputText v-model="student.complement" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-5">
-                                <label class="block font-bold mb-3">Bairro</label>
-                                <InputText v-model="student.neighborhood" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-5">
-                                <label class="block font-bold mb-3">Cidade</label>
-                                <InputText v-model="student.city" fluid />
-                            </div>
-                            <div class="col-span-12 xl:col-span-2">
-                                <label class="block font-bold mb-3">UF</label>
-                                <InputText v-model="student.state" fluid />
-                            </div>
-                        </div>
-                    </TabPanel>
+                        <TabPanel value="1">
+                            <div class="grid grid-cols-12 gap-4">
+                                <div class="col-span-12 md:col-span-6">
+                                    <label class="block font-bold mb-3">Período</label>
+                                    <SelectButton v-model="student.period" :options="periodOptions" optionLabel="label" optionValue="value" />
+                                </div>
+                                
+                                <div class="col-span-12 md:col-span-6 flex items-center">
+                                    <div class="flex items-center gap-2 mt-6">
+                                        <InputSwitch v-model="student.is_full_time" inputId="fulltime" />
+                                        <label for="fulltime" class="font-bold cursor-pointer">Aluno Integral?</label>
+                                    </div>
+                                </div>
 
-                    <TabPanel header="Saúde & Emergência">
-                        <div class="mb-2">
-                            <label class="block font-bold mb-3 text-red-500">Alergias</label>
-                            <Editor v-model="student.allergies" rows="3" autoResize placeholder="Lista de alergias..." fluid editorStyle="height: 320px" />
-                        </div>
-                        <div class="mb-2">
-                            <label class="block font-bold mb-3">Medicamentos Contínuos</label>
-                            <Editor v-model="student.medications" rows="3" autoResize fluid editorStyle="height: 320px" />
-                        </div>
-                        <div class="mb-2">
-                            <label class="block font-bold mb-3">Contato de Emergência (Nome e Telefone)</label>
-                            <InputText v-model="student.emergency_contact" placeholder="Ex: Avó Maria - (11) 99999-9999" fluid />
-                        </div>
-                    </TabPanel>
+                                <div class="col-span-12">
+                                    <label class="block font-bold mb-3">Plano de Refeições</label>
+                                    <Dropdown v-model="student.meals" :options="mealOptions" optionLabel="label" optionValue="value" placeholder="Selecione..." fluid />
+                                </div>
 
-                    <TabPanel header="Responsáveis (Pais)">
-                        <div class="mb-2">
-                            <label class="block font-bold mb-3">Vincular Responsáveis Cadastrados</label>
+                                <div class="col-span-12">
+                                    <label class="block font-bold mb-3">Atividades Extras</label>
+                                    <MultiSelect 
+                                        v-model="student.extra_activities" 
+                                        :options="extraActivities" 
+                                        optionLabel="name" 
+                                        optionValue="id" 
+                                        placeholder="Selecione as atividades" 
+                                        display="chip" 
+                                        filter
+                                        fluid 
+                                    />
+                                </div>
+                            </div>
+                        </TabPanel>
+
+                        <TabPanel value="2">
+                            <div class="grid grid-cols-12 gap-4 mb-2">
+                                <div class="col-span-12 xl:col-span-4">
+                                    <label class="block font-bold mb-3">CEP <i class="pi pi-search text-primary ml-1" v-tooltip="'Digite o CEP para buscar'"></i></label>
+                                    <InputMask v-model="student.zip_code" mask="99999-999" @blur="searchCep" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-8">
+                                    <label class="block font-bold mb-3">Logradouro (Rua/Av)</label>
+                                    <InputText v-model="student.street" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-4">
+                                    <label class="block font-bold mb-3">Número</label>
+                                    <InputText id="number" v-model="student.number" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-8">
+                                    <label class="block font-bold mb-3">Complemento</label>
+                                    <InputText v-model="student.complement" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-5">
+                                    <label class="block font-bold mb-3">Bairro</label>
+                                    <InputText v-model="student.neighborhood" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-5">
+                                    <label class="block font-bold mb-3">Cidade</label>
+                                    <InputText v-model="student.city" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-2">
+                                    <label class="block font-bold mb-3">UF</label>
+                                    <InputText v-model="student.state" fluid />
+                                </div>
+                            </div>
+                        </TabPanel>
+
+                        <TabPanel value="3">
+                            <div class="mb-4">
+                                <label class="block font-bold mb-3 text-red-500">Alergias</label>
+                                <Textarea v-model="student.allergies" rows="3" autoResize fluid placeholder="Descreva alergias alimentares ou medicamentosas..." />
+                            </div>
+                            <div class="mb-4">
+                                <label class="block font-bold mb-3">Medicamentos Contínuos</label>
+                                <Textarea v-model="student.medications" rows="3" autoResize fluid />
+                            </div>
+                            <div class="mb-4">
+                                <label class="block font-bold mb-3">Contato de Emergência</label>
+                                <InputText v-model="student.emergency_contact" placeholder="Nome e Telefone" fluid />
+                            </div>
                             
-                            <MultiSelect 
-                                id="guardians"
-                                v-model="student.guardians" 
-                                :options="guardians" 
-                                optionLabel="label"
-                                optionValue="id"
-                                dataKey="id"
-                                placeholder="Busque pelo nome ou CPF..." 
-                                display="chip" 
-                                filter
-                                fluid
-                            />
+                            <Divider />
                             
-                            <small class="block mt-2">
-                                Não encontrou? <router-link to="/academic/guardians">Cadastre o Responsável aqui</router-link> antes de vincular.
-                            </small>
-                        </div>
-                    </TabPanel>
+                            <div class="grid grid-cols-12 gap-4">
+                                <div class="col-span-12 md:col-span-6">
+                                    <label class="block font-bold mb-3">Laudo Médico (PDF/IMG)</label>
+                                    <FileUpload mode="basic" name="medical_report" accept="image/*,.pdf" :maxFileSize="2000000" @select="(e) => onFileSelect(e, 'medical_report')" :auto="false" chooseLabel="Anexar Arquivo" />
+                                    <small v-if="student.medical_report && typeof student.medical_report === 'string'" class="text-green-600 block mt-2">
+                                        <i class="pi pi-file mr-1"></i> Arquivo já enviado.
+                                    </small>
+                                </div>
+                                
+                                <div class="col-span-12 md:col-span-6">
+                                    <label class="block font-bold mb-3">Receita Médica</label>
+                                    <FileUpload mode="basic" name="prescription" accept="image/*,.pdf" :maxFileSize="2000000" @select="(e) => onFileSelect(e, 'prescription')" :auto="false" chooseLabel="Anexar Receita" />
+                                </div>
+                            </div>
+                        </TabPanel>
 
-                </TabView>
+                        <TabPanel value="4">
+                            <div class="mb-2">
+                                <label class="block font-bold mb-3">Vincular Responsáveis Cadastrados</label>
+                                <MultiSelect 
+                                    id="guardians"
+                                    v-model="student.guardians" 
+                                    :options="guardians" 
+                                    optionLabel="label"
+                                    optionValue="id"
+                                    dataKey="id"
+                                    placeholder="Busque pelo nome ou CPF..." 
+                                    display="chip" 
+                                    filter
+                                    fluid
+                                />
+                                <small class="block mt-2 text-gray-500">
+                                    Não encontrou? <router-link to="/academic/guardians" class="text-primary font-bold hover:underline">Cadastre o Responsável aqui</router-link> antes de vincular.
+                                </small>
+                            </div>
+                        </TabPanel>
+
+                    </TabPanels>
+                </Tabs>
 
                 <template #footer>
                     <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="studentDialog = false" />

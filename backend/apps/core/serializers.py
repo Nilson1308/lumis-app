@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from .models import User, SchoolAccount
 
 User = get_user_model()
 
@@ -15,3 +16,18 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         # Garanta que 'groups' está na lista, além dos campos padrão
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'groups', 'is_superuser']
+
+class SchoolAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SchoolAccount
+        fields = [
+            'name', 
+            'logo',
+            'icon',
+            'primary_color', 
+            'secondary_color', 
+            'email', 
+            'phone', 
+            'address', 
+            'website'
+        ]

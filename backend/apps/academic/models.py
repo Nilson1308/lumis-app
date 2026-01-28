@@ -53,6 +53,18 @@ class Guardian(models.Model):
     def __str__(self):
         return self.name
 
+class ExtraActivity(models.Model):
+    name = models.CharField("Nome da Atividade", max_length=100)
+    description = models.TextField("Descrição", blank=True)
+    price = models.DecimalField("Valor Mensal", max_digits=10, decimal_places=2, default=0.00)
+    
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Atividade Extra"
+        verbose_name_plural = "Atividades Extras"
+
 class Student(models.Model):
     # Identificação Básica
     name = models.CharField("Nome Completo", max_length=150)
@@ -75,10 +87,32 @@ class Student(models.Model):
     city = models.CharField("Cidade", max_length=50, default="Mogi das Cruzes")
     state = models.CharField("UF", max_length=2, default="SP")
 
+    # Pedagógico & Rotina ---
+    PERIOD_CHOICES = [
+        ('MORNING', 'Manhã'),
+        ('AFTERNOON', 'Tarde'),
+    ]
+    period = models.CharField("Período", max_length=20, choices=PERIOD_CHOICES, default='AFTERNOON')
+    
+    is_full_time = models.BooleanField("Integral?", default=False)
+    
+    MEALS_CHOICES = [
+        ('NONE', 'Não optante'),
+        ('LUNCH', 'Almoço'),
+        ('SNACK', 'Lanche'),
+        ('BOTH', 'Almoço + Lanche'),
+    ]
+    meals = models.CharField("Plano de Refeições", max_length=20, choices=MEALS_CHOICES, default='NONE')
+
+    # atividades extra
+    extra_activities = models.ManyToManyField(ExtraActivity, blank=True, verbose_name="Atividades Extras")
+
     # Dados de Saúde/Emergência
     allergies = models.TextField("Alergias", blank=True)
     medications = models.TextField("Uso Contínuo de Medicamentos", blank=True)
     emergency_contact = models.CharField("Contato de Emergência (Nome/Tel)", max_length=100, blank=True)
+    medical_report = models.FileField("Laudo Médico", upload_to='students/medical/', null=True, blank=True)
+    prescription = models.FileField("Receita Médica", upload_to='students/prescriptions/', null=True, blank=True)
 
     # Vínculos
     # ManyToMany: Um aluno pode ter vários responsáveis (Pai e Mãe)

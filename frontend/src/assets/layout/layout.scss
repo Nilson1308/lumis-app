@@ -11,3 +11,64 @@
 @use './_responsive';
 @use './_utils';
 @use './_typography';
+
+/* 2. Definições Globais (Aqui restauramos o Roxo Lumis como padrão) */
+:root {
+    /* Cores de Identidade (Serão sobrescritas pelo tenantStore se houver escola) */
+    --primary-color: #a855f7;       /* Roxo 500 */
+    --primary-color-text: #ffffff;
+    --secondary-color: #475569;     /* Slate 600 */
+    --app-logo: url('../logo-lumis.png');
+
+    /* Variáveis Semânticas do PrimeVue (Essenciais para Inputs e Botões funcionarem) */
+    --p-primary-color: var(--p-primary-500);
+    --p-primary-hover-color: var(--p-primary-600);
+    --p-primary-active-color: var(--p-primary-700);
+    --p-primary-contrast-color: #ffffff;
+}
+
+/* 3. Customizações Visuais */
+html {
+    font-size: 16px; /* Aumenta a base de todo o sistema (rem) */
+}
+
+body {
+    font-family: 'Inter', sans-serif !important;
+    -webkit-font-smoothing: antialiased; /* Renderização de fonte mais nítida */
+    color: var(--surface-900);
+}
+
+/* --- Inputs e Campos de Texto --- */
+.p-inputtext, 
+.p-dropdown, 
+.p-multiselect, 
+.p-calendar-input, 
+.p-password-input {
+    @apply text-base py-3 px-4 !important; /* Mais altura e espaço lateral */
+    border-radius: 8px !important; /* Cantos mais suaves */
+}
+
+/* --- Botões --- */
+.p-button {
+    @apply text-base py-3 px-5 font-semibold tracking-wide !important;
+    border-radius: 8px !important;
+}
+
+/* --- Tabelas (Datatables) --- */
+/* Dá mais respiro para as linhas da tabela não ficarem espremidas */
+.p-datatable .p-datatable-tbody > tr > td {
+    @apply py-4 px-4 text-base !important;
+}
+
+.p-datatable .p-datatable-thead > tr > th {
+    @apply py-4 px-4 text-base font-bold bg-surface-50 dark:bg-surface-900 !important;
+}
+
+/* --- Labels Flutuantes e Títulos --- */
+label, .p-float-label > label {
+    @apply text-base;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    @apply font-bold text-surface-900 dark:text-surface-0;
+}

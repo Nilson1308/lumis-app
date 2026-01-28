@@ -14,6 +14,8 @@ RUN npm install
 # 3. Copia todo o resto do projeto
 COPY . .
 
+
+RUN ls -la src/assets/
 # --- CORREÇÃO BLINDADA ---
 # O comando COPY . . acima pode ter trazido a pasta 'node_modules' do Windows,
 # que corrompe o build no Linux. Aqui nós forçamos a remoção dela e reinstalamos

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Segment, ClassRoom, Subject, Guardian, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification
+from .models import Segment, ClassRoom, Subject, Guardian, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity
 
 User = get_user_model()
 
@@ -20,6 +20,11 @@ class ClassRoomSerializer(serializers.ModelSerializer):
 class GuardianSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guardian
+        fields = '__all__'
+
+class ExtraActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExtraActivity
         fields = '__all__'
 
 class StudentSerializer(serializers.ModelSerializer):
