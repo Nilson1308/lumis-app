@@ -47,6 +47,7 @@ watchEffect(() => {
         newMenu.push({
             label: 'Coordenação',
             items: [
+                { label: 'Planejamentos Semanal', icon: 'pi pi-fw pi-calendar', to: { name: 'planning' } },
                 { label: 'Justificativas de Faltas', icon: 'pi pi-fw pi-check-circle', to: { name: 'justification-review' } },
                 { label: 'Atas de Reunião', icon: 'pi pi-fw pi-file', to: { name: 'meeting-minutes' } },
                 { label: 'Relatórios Semanais', icon: 'pi pi-fw pi-list', to: { name: 'weekly-reports' } },

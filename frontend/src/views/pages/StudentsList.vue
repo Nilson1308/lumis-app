@@ -210,16 +210,16 @@ const saveStudent = async () => {
             
             if (student.value.id) {
                 await api.patch(`students/${student.value.id}/`, formData, config);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado!' });
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado!', life: 3000 });
             } else {
                 await api.post('students/', formData, config);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado!' });
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado!', life: 3000 });
             }
             studentDialog.value = false;
             loadData();
         } catch (error) {
             console.error(error);
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.' });
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.', life: 3000 });
         }
     }
 };
@@ -228,10 +228,10 @@ const deleteStudent = async () => {
     try {
         await api.delete(`students/${student.value.id}/`);
         deleteStudentDialog.value = false;
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido!' });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido!', life: 3000 });
         loadData();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao remover.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao remover.', life: 3000 });
     }
 };
 

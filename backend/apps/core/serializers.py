@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import User, SchoolAccount
+from .models import User, SchoolAccount, Notification
 
 User = get_user_model()
 
@@ -31,3 +31,8 @@ class SchoolAccountSerializer(serializers.ModelSerializer):
             'address', 
             'website'
         ]
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'title', 'message', 'link', 'read', 'created_at']

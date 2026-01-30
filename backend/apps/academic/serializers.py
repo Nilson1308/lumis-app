@@ -18,9 +18,36 @@ class ClassRoomSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'year', 'segment', 'segment_name']
 
 class GuardianSerializer(serializers.ModelSerializer):
+    # Redefinimos explicitamente para garantir que não sejam read_only
+    phone = serializers.CharField(required=False)
+    secondary_phone = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = Guardian
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'cpf', 'rg', 
+            'email', 'phone', 'secondary_phone', 
+            'profession', 'user'
+        ]
+
+    def update(self, instance, validated_data):
+        instance.name = validated_data.get('name', instance.name)
+        instance.cpf = validated_data.get('cpf', instance.cpf)
+        instance.rg = validated_data.get('rg', instance.rg)
+        instance.phone = validated_data.get('phone', instance.phone)
+        instance.secondary_phone = validated_data.get('secondary_phone', instance.secondary_phone)
+        instance.email = validated_data.get('email', instance.email)
+        instance.profession = validated_data.get('profession', instance.profession)
+        
+        instance.save()
+        
+        # BÔNUS: Se houver usuário vinculado, sincroniza o email dele também
+        if instance.user and instance.email:
+            instance.user.email = instance.email
+            instance.user.save()
+            
+        return instance
 
 class ExtraActivitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -137,7 +164,13 @@ class LessonPlanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LessonPlan
-        fields = '__all__'
+        fields = [
+            'id', 'assignment', 'topic', 'description', 
+            'start_date', 'end_date', 'status', 
+            'attachment', 'coordinator_note',
+            'teacher_name', 'subject_name', 'classroom_name',
+            'created_at'
+        ]
 
 class SimpleUserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -190,7 +223,7 @@ class GuardianProfileUpdateSerializer(serializers.ModelSerializer):
     """ Permite ao pai editar apenas seus dados de contato """
     class Meta:
         model = Guardian
-        fields = ['email', 'phone', 'email']
+        fields = ['email', 'phone', 'email', 'secondary_phone']
 
 class StudentHealthUpdateSerializer(serializers.ModelSerializer):
     """ Permite ao pai editar apenas saúde e emergência do filho """

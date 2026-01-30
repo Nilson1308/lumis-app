@@ -51,11 +51,11 @@ const handleLogin = async () => {
                 <div class="flex flex-col gap-4">
                     <div>
                         <label for="username" class="block text-surface-900 dark:text-surface-0 font-medium mb-2">Usuário</label>
-                        <InputText id="username" v-model="username" type="text" class="w-full" placeholder="Seu usuário ou CPF" />
+                        <InputText id="username" v-model="username" type="text" class="w-full" placeholder="Seu usuário ou CPF" size="large" />
                     </div>
                     <div>
                         <label for="password" class="block text-surface-900 dark:text-surface-0 font-medium mb-2">Senha</label>
-                        <InputText id="password" v-model="password" type="password" class="w-full" @keyup.enter="handleLogin" />
+                        <InputText id="password" v-model="password" type="password" class="w-full" @keyup.enter="handleLogin" size="large" />
                     </div>
 
                     <div v-if="errorMessage" class="text-red-500 font-semibold text-sm text-center">
@@ -70,7 +70,7 @@ const handleLogin = async () => {
                         <a class="font-medium no-underline text-sm cursor-pointer text-primary">Esqueceu a senha?</a>
                     </div>
 
-                    <Button label="Entrar" icon="pi pi-sign-in" class="w-full" :loading="loading" @click="handleLogin"></Button>
+                    <Button label="Entrar" icon="pi pi-sign-in" class="w-full" :loading="loading" @click="handleLogin" size="large"></Button>
 
                     <div class="mt-6 text-center border-t border-surface-200 dark:border-surface-700 pt-4">
                         <span class="text-600 text-xs uppercase tracking-wider">Acesso restrito</span><br>

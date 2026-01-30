@@ -181,3 +181,17 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173", # Porta do Vite (Frontend)
     "http://127.0.0.1:5173",
 ]
+
+# --- CONFIGURAÇÃO DE E-MAIL ---
+
+# MODO TESTE (Apenas imprime no terminal do docker):
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# MODO PRODUÇÃO (Quando for pra valer, descomente e preencha):
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'smtp.gmail.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'seu-email@escola.com'
+# EMAIL_HOST_PASSWORD = 'senha-de-app-do-google'
+# DEFAULT_FROM_EMAIL = 'Sistema Lumis <no-reply@lumis.com>'

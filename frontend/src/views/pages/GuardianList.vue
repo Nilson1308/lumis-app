@@ -42,7 +42,13 @@ const openNew = () => {
 };
 
 const editGuardian = (item) => {
-    guardian.value = { ...item };
+    // Garante que campos opcionais tenham string vazia se vierem null do backend
+    guardian.value = { 
+        ...item,
+        secondary_phone: item.secondary_phone || '',
+        email: item.email || '',
+        profession: item.profession || ''
+    };
     guardianDialog.value = true;
 };
 
@@ -55,26 +61,49 @@ const confirmDeleteGuardian = (item) => {
 const saveGuardian = async () => {
     submitted.value = true;
 
+    // Validação básica frontend
     if (guardian.value.name && guardian.value.cpf && guardian.value.phone) {
+        
+        // Clona o objeto para limpar dados antes de enviar (se necessário)
+        const payload = { ...guardian.value };
+
+        // TRUQUE: Se o telefone secundário estiver vazio, envie null ou string vazia
+        // para evitar erro de validação no backend
+        if (!payload.secondary_phone) payload.secondary_phone = '';
+        if (!payload.email) payload.email = '';
+
         try {
             if (guardian.value.id) {
-                await api.put(`guardians/${guardian.value.id}/`, guardian.value);
+                // --- MUDANÇA PRINCIPAL: PUT -> PATCH ---
+                // PATCH é mais seguro para edições parciais
+                await api.patch(`guardians/${guardian.value.id}/`, payload);
                 toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Responsável atualizado', life: 3000 });
             } else {
-                await api.post('guardians/', guardian.value);
+                await api.post('guardians/', payload);
                 toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Responsável cadastrado', life: 3000 });
             }
+            
             guardianDialog.value = false;
-            loadData();
+            loadData(); // Recarrega a lista
+            
         } catch (error) {
-            console.error(error);
-            // Tratamento simples para erro de CPF duplicado (comum)
-            if (error.response && error.response.data && error.response.data.cpf) {
-                toast.add({ severity: 'error', summary: 'Erro', detail: 'Este CPF já está cadastrado.', life: 3000 });
+            console.error("Erro detalhado:", error);
+            
+            // --- TRATAMENTO DE ERRO MELHORADO ---
+            // Se o backend mandou detalhes (ex: CPF duplicado, Campo obrigatório), mostramos aqui.
+            if (error.response && error.response.data) {
+                const errors = error.response.data;
+                // Pega a primeira mensagem de erro que encontrar
+                const firstError = Object.values(errors)[0]; 
+                const msg = Array.isArray(firstError) ? firstError[0] : firstError;
+                
+                toast.add({ severity: 'error', summary: 'Erro de Validação', detail: msg || 'Verifique os dados.', life: 5000 });
             } else {
-                toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar.', life: 3000 });
+                toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha na comunicação com o servidor.', life: 3000 });
             }
         }
+    } else {
+         toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Nome, CPF e Celular.', life: 3000 });
     }
 };
 
@@ -161,7 +190,7 @@ onMounted(() => {
                     </div>
                     <div class="col-span-12 xl:col-span-6">
                         <label class="block font-bold mb-3">Telefone Secundário</label>
-                        <InputMask v-model="guardian.secondary_phone" mask="(99) 99999-9999" placeholder="(11) 99999-9999" fluid />
+                        <InputMask v-model="guardian.secondary_phone" mask="(99) 99999-9999" placeholder="Opcional" fluid />
                     </div>
                 </div>
 

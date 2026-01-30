@@ -20,6 +20,11 @@ const router = createRouter({
                     name: 'dashboard',
                     component: () => import('@/views/Dashboard.vue')
                 },
+                {
+                    path: '/notifications',
+                    name: 'notifications',
+                    component: () => import('@/views/pages/Notifications.vue')
+                },
 
                 // --- PORTAL DA FAMÍLIA ---
                 {
@@ -47,7 +52,7 @@ const router = createRouter({
                 // --- MÓDULO ACADÊMICO ---
                 {
                     path: '/students',
-                    name: 'students-list', // CORRIGIDO: Tem que bater com o AppMenu
+                    name: 'students-list',
                     component: () => import('@/views/pages/StudentsList.vue')
                 },
                 {
@@ -109,6 +114,11 @@ const router = createRouter({
                 },                
 
                 // --- COORDENAÇÃO ---
+                {
+                    path: '/coordination/planning',
+                    name: 'planning',
+                    component: () => import('@/views/pages/coordination/PlanningReview.vue')
+                },
                 {
                     path: '/coordination/observations',
                     name: 'observations',

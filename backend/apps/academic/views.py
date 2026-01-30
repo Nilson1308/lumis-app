@@ -43,12 +43,18 @@ class GuardianViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'cpf', 'email']
 
     def get_serializer_class(self):
-        # Se for PUT/PATCH, usa o serializer restrito (só contato)
+        user = self.request.user
+        
+        # Lógica corrigida:
+        # Só restringe se for edição E o usuário NÃO for da equipe (Admin/Coord)
         if self.action in ['update', 'partial_update']:
-            return GuardianProfileUpdateSerializer
+            # Se for um usuário comum (Pai), usa o restrito
+            if not (user.is_staff or user.is_superuser or user.groups.filter(name='Coordenacao').exists()):
+                return GuardianProfileUpdateSerializer
+                
+        # Se for Admin/Staff, usa o completo (com Nome, CPF, Secundário...)
         return GuardianSerializer
 
-    # Action para pegar o perfil "Meu Perfil" sem precisar saber o ID
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request):
         if hasattr(request.user, 'guardian_profile'):
@@ -447,7 +453,15 @@ class DashboardDataView(APIView):
 
 class LessonPlanViewSet(viewsets.ModelViewSet):
     serializer_class = LessonPlanSerializer
-    filterset_fields = ['assignment', 'status', 'start_date', 'assignment__teacher']
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = [
+        'assignment__teacher',   # Filtrar por Professor
+        'assignment__classroom', # Filtrar por Turma
+        'assignment__subject',   # Filtrar por Matéria
+        'status',                # Filtrar por Status (Enviado, Aprovado...)
+        'start_date'             # Filtrar por Data
+    ]
+    search_fields = ['topic', 'assignment__teacher__name']
     
     def get_queryset(self):
         user = self.request.user

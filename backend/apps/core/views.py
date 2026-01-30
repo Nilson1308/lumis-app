@@ -1,11 +1,11 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import get_user_model
-from .models import SchoolAccount
-from .serializers import UserSerializer, SchoolAccountSerializer
+from .models import SchoolAccount, Notification
+from .serializers import UserSerializer, SchoolAccountSerializer, NotificationSerializer
 
 User = get_user_model()
 
@@ -38,3 +38,22 @@ class SchoolConfigView(APIView):
         # Se não houver config, retorna 204 (No Content) ou 404
         # O Frontend entenderá isso e usará o padrão 'Lumis'
         return Response(status=404)
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+
+    def get_queryset(self):
+        # Cada usuário só vê as suas notificações
+        return Notification.objects.filter(recipient=self.request.user)
+
+    @action(detail=True, methods=['patch'])
+    def mark_read(self, request, pk=None):
+        notif = self.get_object()
+        notif.read = True
+        notif.save()
+        return Response({'status': 'read'})
+
+    @action(detail=False, methods=['patch'])
+    def mark_all_read(self, request):
+        self.get_queryset().update(read=True)
+        return Response({'status': 'all_read'})

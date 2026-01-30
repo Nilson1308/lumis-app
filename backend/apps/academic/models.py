@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import FileExtensionValidator
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -266,8 +267,13 @@ class LessonPlan(models.Model):
     # Conteúdo (Usaremos Editor Rico aqui)
     topic = models.CharField("Tema / Tópico Principal", max_length=200)
     description = models.TextField("Desenvolvimento da Aula", blank=True)
-    resources = models.TextField("Recursos Didáticos", blank=True)
-    homework = models.TextField("Lição de Casa / Fixação", blank=True)
+    attachment = models.FileField(
+        "Anexo (Atividade/Material)", 
+        upload_to='lesson_plans/', 
+        null=True, 
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'jpg', 'jpeg', 'png'])]
+    )
     recipients = models.ManyToManyField(
         settings.AUTH_USER_MODEL, 
         related_name='received_plans', 
