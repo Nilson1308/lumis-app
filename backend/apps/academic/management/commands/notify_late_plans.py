@@ -10,10 +10,10 @@ from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class Command(BaseCommand):
-    help = 'Notifica atrasos (MODO DEBUG)'
+    help = 'Notifica atrasos individualmente (MODO DEBUG)'
 
     def handle(self, *args, **options):
-        self.stdout.write("--- 🔍 INICIANDO DIAGNÓSTICO (V2) ---")
+        self.stdout.write("--- 🔍 INICIANDO DIAGNÓSTICO (V3 - Individual) ---")
         
         today = timezone.now().date()
         # Calcula próxima segunda-feira
@@ -27,113 +27,72 @@ class Command(BaseCommand):
         # 1. Checa Atribuições
         assignments = TeacherAssignment.objects.all()
         count = assignments.count()
-        self.stdout.write(f"📊 Total de Atribuições encontradas: {count}")
-
+        
         if count == 0:
-            self.stdout.write("❌ NENHUMA atribuição de aula encontrada. O script não tem o que verificar.")
+            self.stdout.write("❌ NENHUMA atribuição encontrada.")
             return
 
-        teachers_status = {}
-        missing_plans_coord = []
-        emails_to_send = []
+        # Busca Coordenadores (para notificar)
+        coords = User.objects.filter(groups__name='Coordenacao')
+        if not coords.exists():
+            coords = User.objects.filter(is_superuser=True)
 
-        self.stdout.write("\n--- Processando Atribuições ---")
+        emails_to_send = []
+        notifications_created = 0
+
+        self.stdout.write("\n--- Processando Pendências ---")
 
         for assignment in assignments:
-            # O campo 'teacher' é uma instância de User
             teacher_user = assignment.teacher
-            
-            # CORREÇÃO: User não tem .name, usamos get_full_name() ou username
-            teacher_name = teacher_user.get_full_name()
-            if not teacher_name:
-                teacher_name = teacher_user.username
-
+            teacher_name = teacher_user.get_full_name() or teacher_user.username
             subject_name = assignment.subject.name
             class_name = assignment.classroom.name
             
-            # DEBUG: Verifica se tem email (mas não pula, para gerar notificação no sistema)
-            if not teacher_user.email:
-                self.stdout.write(f"⚠️ AVISO: Usuário '{teacher_name}' não tem e-mail. Apenas notificação visual será gerada.")
-
-            # Checa se o plano existe
-            # Status que contam como ENTREGUE: SUBMITTED ou APPROVED
+            # Checa se o plano existe (SUBMITTED ou APPROVED)
             is_done = LessonPlan.objects.filter(
                 assignment=assignment, 
                 start_date=next_monday,
                 status__in=['SUBMITTED', 'APPROVED']
             ).exists()
             
-            status_debug = "✅ OK (Enviado)" if is_done else "❌ PENDENTE"
-            self.stdout.write(f"   > Prof: {teacher_name} | Turma: {class_name} | {status_debug}")
-
             if not is_done:
-                if teacher_user not in teachers_status:
-                    teachers_status[teacher_user] = []
-                teachers_status[teacher_user].append(f"{subject_name} ({class_name})")
+                # DETECTOU PENDÊNCIA INDIVIDUAL
+                self.stdout.write(f"❌ Pendência: {teacher_name} - {subject_name} ({class_name})")
+                
+                week_fmt = next_monday.strftime('%d/%m')
+                iso_date = next_monday.strftime('%Y-%m-%d') # Formato para URL (ex: 2026-02-02)
 
-        self.stdout.write("\n--- Gerando Notificações ---")
+                # 1. Notificação para o PROFESSOR (Com Link Inteligente)
+                teacher_link = f"/teacher/lesson-plans?assignment={assignment.id}"
+                
+                try:
+                    Notification.objects.create(
+                        recipient=teacher_user,
+                        title="Planejamento Pendente",
+                        message=f"Falta enviar: {subject_name} ({class_name}) para a semana de {week_fmt}.",
+                        link=teacher_link 
+                    )
+                    notifications_created += 1
+                except Exception as e:
+                    self.stdout.write(f"Erro ao criar notif professor: {e}")
 
-        # Processar Professores com Pendências
-        for teacher_user, missing_subjects in teachers_status.items():
-            t_name = teacher_user.get_full_name() or teacher_user.username
-            self.stdout.write(f"🔔 Notificando: {t_name}")
-            
-            subject_txt = ", ".join(missing_subjects)
-            
-            # 1. Prepara E-mail (se tiver endereço)
-            if teacher_user.email:
-                msg_email = (
-                    f"Olá {t_name},\n\n"
-                    f"Consta pendência de envio do Planejamento para a semana de {next_monday.strftime('%d/%m')} "
-                    f"nas turmas: {subject_txt}.\n"
-                    f"Por favor, acesse o sistema e regularize."
-                )
-                emails_to_send.append((
-                    "[Lumis] Alerta de Planejamento Pendente",
-                    msg_email,
-                    settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'sistema@lumis.com',
-                    [teacher_user.email]
-                ))
-            
-            # 2. Gera Notificação no Sistema (Sino)
-            try:
-                Notification.objects.create(
-                    recipient=teacher_user,
-                    title="Planejamento Pendente",
-                    message=f"Falta enviar: {subject_txt} para {next_monday.strftime('%d/%m')}.",
-                    link="/teacher/planning" # Verifique se a rota do frontend bate com essa
-                )
-            except Exception as e:
-                self.stdout.write(f"Erro ao criar notificação: {e}")
-            
-            missing_plans_coord.append(f"{t_name}: {subject_txt}")
+                # 2. Notificação para COORDENADORES (Link com Filtro)
+                coord_link = f"/coordination/planning?assignment={assignment.id}"
 
-        # Enviar E-mails em Massa
-        if emails_to_send:
-            try:
-                send_mass_mail(emails_to_send, fail_silently=False)
-                self.stdout.write(f"📧 {len(emails_to_send)} e-mails enviados.")
-            except Exception as e:
-                self.stdout.write(f"❌ Erro ao enviar e-mails (Verifique settings.py): {e}")
-        else:
-            self.stdout.write("ℹ️ Nenhum e-mail enviado (lista vazia ou sem endereços).")
+                msg_coord = f"{teacher_name}: Pendente {subject_name} ({class_name}) - Semana {week_fmt}"
+                for coord in coords:
+                    Notification.objects.create(
+                        recipient=coord,
+                        title="Atraso no Planejamento",
+                        message=msg_coord,
+                        link=coord_link
+                    )
+                    notifications_created += 1
 
-        # Processar Coordenação
-        if missing_plans_coord:
-            coords = User.objects.filter(groups__name='Coordenacao')
-            if not coords.exists():
-                self.stdout.write("⚠️ Nenhum usuário no grupo 'Coordenacao'. Usando Superusers.")
-                coords = User.objects.filter(is_superuser=True)
-
-            msg_coord = f"{len(missing_plans_coord)} professores com pendência para semana que vem."
-            
-            for coord in coords:
-                Notification.objects.create(
-                    recipient=coord,
-                    title="Alerta de Atrasos",
-                    message=msg_coord,
-                    link="/coordination/planning"
-                )
-            self.stdout.write(f"📢 {coords.count()} coordenadores notificados.")
+        self.stdout.write(f"\n✅ Total de notificações geradas no sistema: {notifications_created}")
+        
+        # NOTA: O envio de e-mails em massa foi removido neste bloco simplificado para focar nas notificações visuais.
+        # Se quiser os e-mails, o ideal é reintroduzir a lógica de agrupamento (dict) APENAS para os e-mails,
+        # mantendo o loop acima para as notificações visuais.
 
         self.stdout.write("--- Concluído ---")

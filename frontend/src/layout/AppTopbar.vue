@@ -6,16 +6,103 @@ import { useAuthStore } from '@/stores/auth';
 import { useTenantStore } from '@/stores/tenant';
 import api from '@/service/api';
 
+import Button from 'primevue/button';
+import Avatar from 'primevue/avatar';
+import OverlayPanel from 'primevue/overlaypanel';
+import ScrollPanel from 'primevue/scrollpanel';
+import OverlayBadge from 'primevue/overlaybadge';
+import Divider from 'primevue/divider';
+
 const { toggleMenu, toggleDarkMode, isDarkTheme } = useLayout();
 const authStore = useAuthStore();
 const tenantStore = useTenantStore();
 const router = useRouter();
 
-// --- PERFIL ---
-const op = ref(null);
+const op = ref(); // Perfil
+const on = ref(); // Notificações
 
-const toggleProfile = (event) => {
+const notificacoes = ref([]);
+const unreadCount = ref(0);
+
+const toggle = (event) => {
     op.value.toggle(event);
+};
+
+const toggleNotificacoes = (event) => {
+    on.value.toggle(event);
+    fetchNotificacoes();
+};
+
+const userInitial = computed(() => {
+    const user = authStore.user;
+    if (user?.first_name) {
+        return user.first_name[0].toUpperCase();
+    }
+    if (user?.username) {
+        return user.username[0].toUpperCase();
+    }
+    return '?';
+});
+
+const fetchNotificacoes = async () => {
+    try {
+        const response = await api.get('notifications/');
+        
+        let data = response.data;
+        if (data.results) data = data.results;
+
+        notificacoes.value = Array.isArray(data) ? data : [];
+        unreadCount.value = notificacoes.value.filter((n) => !n.read).length;
+
+    } catch (error) {
+        console.error('Erro ao buscar notificações:', error);
+        notificacoes.value = [];
+        unreadCount.value = 0;
+    }
+};
+
+const handleNotificacaoClick = async (notificacao) => {
+    try {
+        if (!notificacao.read) {
+            await api.patch(`notifications/${notificacao.id}/mark_read/`);
+            notificacao.read = true; // Atualiza localmente
+            unreadCount.value = Math.max(0, unreadCount.value - 1);
+        }
+        if (notificacao.link) {
+            router.push(notificacao.link);
+        }
+        on.value.hide();
+    } catch (error) {
+        console.error('Erro ao marcar notificação:', error);
+    }
+};
+
+const marcarTodasComoLidas = async () => {
+    try {
+        await api.patch('notifications/mark_all_read/');
+        notificacoes.value.forEach(n => n.read = true);
+        unreadCount.value = 0;
+    } catch (error) {
+        console.error('Erro ao marcar todas:', error);
+    }
+};
+
+const getNotificacaoIcon = (titulo) => {
+    // Adaptação simples baseada no título, já que não temos o campo 'tipo' na notificação genérica
+    if (titulo?.includes('Planejamento')) return 'pi pi-calendar-times';
+    if (titulo?.includes('Atraso')) return 'pi pi-exclamation-triangle';
+    return 'pi pi-bell';
+};
+
+const getNotificacaoClass = (notificacao) => {
+    if (!notificacao.read) {
+        // Lógica visual baseada no título (substituto do tipo)
+        if (notificacao.title?.includes('Atraso') || notificacao.title?.includes('Pendente')) {
+            return 'avatar-atraso text-white';
+        }
+        return 'avatar-novo text-white'; // Padrão azul para novos
+    }
+    return 'avatar-lida text-color-secondary'; // Cinza para lidos
 };
 
 const onLogout = () => {
@@ -23,73 +110,14 @@ const onLogout = () => {
     router.push('/login');
 };
 
-const userLabel = computed(() => {
-    const u = authStore.user;
-    if (u?.first_name && u?.last_name) return `${u.first_name} ${u.last_name}`;
-    if (u?.first_name) return u.first_name;
-    return u?.username || 'Usuário';
-});
-
-const userRole = computed(() => {
-    if (authStore.user?.is_superuser) return 'Administrador';
-    if (authStore.isCoordinator) return 'Coordenação';
-    if (authStore.isTeacher) return 'Professor';
-    if (authStore.isGuardian) return 'Responsável';
-    return 'Colaborador';
-});
-
-// --- NOTIFICAÇÕES ---
-const notifications = ref([]);
-const unreadCount = ref(0);
-const opNotifications = ref(); 
-
-const loadNotifications = async () => {
-    if (!authStore.token) return;
-    try {
-        const { data } = await api.get('notifications/');
-        notifications.value = data.results || data;
-        unreadCount.value = notifications.value.filter(n => !n.read).length;
-    } catch (e) {
-        // Silently fail
-    }
-};
-
-const toggleNotifications = (event) => {
-    opNotifications.value.toggle(event);
-    if (unreadCount.value > 0) {
-        markAllRead(); 
-    }
-};
-
-const markAllRead = async () => {
-    try {
-        await api.patch('notifications/mark_all_read/');
-        unreadCount.value = 0;
-        notifications.value.forEach(n => n.read = true);
-    } catch (e) {
-        console.error(e);
-    }
-};
-
-const goToLink = (link) => {
-    if (link) {
-        router.push(link);
-        opNotifications.value.hide();
-    }
-};
-
-const viewAllNotifications = () => {
-    router.push({ name: 'notifications' }); // Certifique-se que a rota 'notifications' existe
-    opNotifications.value.hide();
-};
-
 let interval;
 onMounted(() => {
-    loadNotifications();
-    interval = setInterval(loadNotifications, 60000);
+    if (authStore.token) {
+        fetchNotificacoes();
+        interval = setInterval(fetchNotificacoes, 60000);
+    }
 });
 onBeforeUnmount(() => clearInterval(interval));
-
 </script>
 
 <template>
@@ -104,101 +132,131 @@ onBeforeUnmount(() => clearInterval(interval));
             </router-link>
         </div>
 
-        <div class="layout-topbar-actions">
+        <div class="layout-topbar-actions items-center">
             <div class="layout-config-menu">
                 <button type="button" class="layout-topbar-action" @click="toggleDarkMode">
                     <i :class="['pi', { 'pi-moon': isDarkTheme, 'pi-sun': !isDarkTheme }]"></i>
                 </button>
-            </div>
 
-            <button class="layout-topbar-action relative mr-3" @click="toggleNotifications">
-                <OverlayBadge :value="unreadCount > 0 ? unreadCount : null" severity="danger" size="small">
-                    <i class="pi pi-bell text-xl" />
-                </OverlayBadge>
-            </button>
+                <button type="button" class="layout-topbar-action mr-3 relative overflow-visible" @click="toggleNotificacoes">
 
-            <OverlayPanel ref="opNotifications" class="w-24rem p-0">
-                <div class="flex flex-column gap-0">
-                    <div class="flex align-items-center justify-content-between p-3 border-bottom-1 surface-border bg-surface-50">
-                        <span class="font-bold text-lg">Notificações</span>
-                        <span v-if="notifications.length > 0" class="text-xs text-primary cursor-pointer hover:underline" @click="markAllRead">
-                            Ler todas
-                        </span>
-                    </div>
-                    
-                    <div v-if="notifications.length === 0" class="p-5 text-center text-gray-500">
-                        <i class="pi pi-bell-slash text-3xl mb-3 block text-gray-300"></i>
-                        <span class="text-sm">Tudo limpo por aqui!</span>
-                    </div>
+                    <OverlayBadge v-if="unreadCount > 0" :value="unreadCount" severity="danger">
+                        <i class="pi pi-bell" />
+                    </OverlayBadge>
 
-                    <div class="max-h-20rem overflow-y-auto">
-                        <div v-for="notif in notifications.slice(0, 5)" :key="notif.id" 
-                             class="p-3 border-bottom-1 surface-border cursor-pointer hover:surface-100 transition-colors"
-                             :class="{'bg-blue-50': !notif.read}"
-                             @click="goToLink(notif.link)">
-                            <div class="flex align-items-start gap-3">
-                                <div class="mt-1">
-                                    <i class="pi pi-circle-fill text-xs" :class="notif.read ? 'text-gray-300' : 'text-blue-500'"></i>
-                                </div>
-                                <div class="flex-1">
-                                    <div class="font-semibold text-sm mb-1 text-900">{{ notif.title }}</div>
-                                    <div class="text-sm text-700 line-height-3 mb-2" style="word-break: break-word;">{{ notif.message }}</div>
-                                    <div class="text-xs text-gray-500 flex align-items-center gap-1">
-                                        <i class="pi pi-clock text-xs"></i>
-                                        {{ new Date(notif.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit' }) }}
+                    <i v-else class="pi pi-bell" />
+                    <span>Notificações</span>
+                </button>
+
+                <OverlayPanel ref="on" appendTo="body" :pt="{ content: { class: 'p-0' } }">
+                    <div class="flex flex-col" style="width: 25rem;">
+                        <div class="flex justify-between center py-3 px-4 surface-50 border-bottom-1 surface-border">
+                            <span class="font-bold text-lg">Notificações</span>
+                            <Button v-if="unreadCount > 0" label="Marcar todas como lidas" class="p-button-text p-button-sm text-xs" @click="marcarTodasComoLidas"></Button>
+                        </div>
+                        
+                        <ScrollPanel style="height: 250px;" class="w-full">
+                            <div class="flex flex-col gap-1 p-2">
+                                <div v-for="notificacao in notificacoes" :key="notificacao.id" @click="handleNotificacaoClick(notificacao)"
+                                    :class="['flex items-center gap-3 p-3 border-round-md cursor-pointer hover:surface-100 transition-colors', 
+                                    { 
+                                        'surface-50': !notificacao.read,  
+                                        'opacity-60': notificacao.read 
+                                    }]">
+                                    
+                                    <Avatar :class="['flex-shrink-0', getNotificacaoClass(notificacao)]"
+                                        :icon="getNotificacaoIcon(notificacao.title)" 
+                                        shape="circle" />
+                                    
+                                    <div class="flex flex-col flex-1">
+                                        <span class="font-bold text-sm mb-1 text-900">{{ notificacao.title }}</span>
+                                        <p :class="['m-0 text-sm line-height-3 text-700']">
+                                            {{ notificacao.message }}
+                                        </p>
+                                        <span class="text-xs text-500 mt-1">
+                                            {{ new Date(notificacao.created_at).toLocaleDateString('pt-BR') }}
+                                        </span>
                                     </div>
                                 </div>
+                                
+                                <div v-if="!notificacoes.length" class="text-center text-color-secondary p-5">
+                                    <i class="pi pi-bell-slash text-2xl mb-2 block text-300"></i>
+                                    Nenhuma notificação por aqui.
+                                </div>
                             </div>
+                        </ScrollPanel>
+                        
+                        <div class="px-4 py-3 border-top-1 surface-border bg-surface-50">
+                            <Button label="Ver todas as notificações" icon="pi pi-arrow-right" iconPos="right" class="p-button-outlined w-full p-button-sm" @click="router.push('/notifications'); on.hide()"></Button>
                         </div>
                     </div>
+                </OverlayPanel>
+            </div>
 
-                    <div v-if="notifications.length > 0" class="p-2 text-center border-top-1 surface-border bg-surface-50 hover:surface-100 cursor-pointer transition-colors" @click="viewAllNotifications">
-                        <span class="text-primary font-bold text-sm">Ver todas as notificações</span>
+            <div v-if="authStore.token" class="flex items-center">
+                <Avatar 
+                    :label="userInitial"
+                    class="cursor-pointer font-bold" 
+                    shape="circle"
+                    :style="{ 'background-color': 'var(--primary-color)', 'color': '#ffffff' }"
+                    @click="toggle" 
+                    aria-haspopup="true" 
+                    aria-controls="overlay_panel"
+                />
+            </div>
+
+            <OverlayPanel ref="op" id="overlay_panel">
+                <div class="flex flex-col items-center gap-4 p-4" style="min-width: 200px;">
+                    <div class="text-center">
+                        <Avatar :label="userInitial" size="xlarge" shape="circle" class="mb-2 font-bold bg-primary text-white" />
+                        <div class="font-bold text-900">{{ authStore.user?.first_name }} {{ authStore.user?.last_name }}</div>
+                        <div class="text-sm text-500">{{ authStore.user?.email || authStore.user?.username }}</div>
+                    </div>
+
+                    <div class="flex flex-col gap-2 w-full">
+                        <Button 
+                            label="Sair" 
+                            icon="pi pi-sign-out" 
+                            class="p-button-text p-button-danger w-full justify-center"
+                            @click="onLogout"
+                        />
                     </div>
                 </div>
             </OverlayPanel>
-
-            <div class="layout-topbar-menu-content">
-                <button type="button" class="layout-topbar-action" @click="toggleProfile">
-                    <i class="pi pi-user"></i>
-                    <span>Profile</span>
-                </button>
-            </div>
         </div>
-
-        <Popover ref="op">
-            <div class="flex flex-col gap-3 w-15rem">
-                <div class="flex align-items-center gap-3 px-2 py-1">
-                    <div class="flex items-center justify-center bg-primary/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
-                        <i class="pi pi-user text-primary text-xl"></i>
-                    </div>
-                    <div>
-                        <span class="font-bold block text-900">{{ userLabel }}</span>
-                        <span class="text-sm text-600">{{ userRole }}</span>
-                    </div>
-                </div>        
-
-                <Divider class="my-0" />
-
-                <Button 
-                    label="Sair do Sistema" 
-                    icon="pi pi-sign-out" 
-                    class="w-full justify-content-start px-2 p-button-text p-button-danger" 
-                    @click="onLogout" 
-                />
-            </div>
-        </Popover>
     </div>
 </template>
 
-<style scoped>
-.layout-topbar-logo img {
-    vertical-align: middle;
-    max-width: 150px; 
-    object-fit: contain;
+<style>
+/* Força o badge a aparecer */
+.p-overlaybadge .p-badge {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 1rem;
+    height: 1rem;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.75rem !important;
 }
-/* Importante para o botão não cortar o badge */
+
 .layout-topbar-action {
-    overflow: visible !important; 
+    overflow: visible !important;
+}
+
+.avatar-atraso {
+    background: var(--p-red-500) !important;
+    color: white !important;
+}
+.avatar-novo {
+    background: var(--p-blue-500) !important;
+    color: white !important;
+}
+.avatar-nao-lida {
+    background: var(--p-green-500) !important;
+    color: white !important;
+}
+.avatar-lida {
+    background: var(--p-surface-300) !important;
+    color: var(--text-color-secondary) !important;
 }
 </style>

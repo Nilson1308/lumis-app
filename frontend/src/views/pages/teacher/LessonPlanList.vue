@@ -43,16 +43,46 @@ const loadData = async () => {
         }));
 
         // 3. NOVO: Carrega Coordenadores
-        // Ajuste a URL se for 'academic/coordinators/' ou apenas 'coordinators/' conforme sua rota
-        const resCoords = await api.get('coordinators/'); 
-        
-        const rawList = resCoords.data.results || resCoords.data;
-        
-        // AQUI ESTÁ A CORREÇÃO: Criamos o campo 'label' manualmente
-        coordinators.value = rawList.map(u => ({
-            id: u.id,
-            label: u.full_name || u.first_name || u.username // Usa o nome completo, ou primeiro nome, ou usuário
-        }));
+        try {
+            const resCoords = await api.get('coordinators/'); 
+            const rawList = resCoords.data.results || resCoords.data;
+            coordinators.value = rawList.map(u => ({
+                id: u.id,
+                label: u.full_name || u.first_name || u.username
+            }));
+
+        } catch (e) {
+            console.error("Erro ao carregar:", e);
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha na conexão' });
+        }
+
+        if (route.query.open === 'true' && route.query.assignment && route.query.date) {
+            console.log("Abrindo modal via notificação...");
+            
+            // Limpa a query da URL para não reabrir ao dar F5 (opcional, mas recomendado)
+            // router.replace({ query: null }); 
+
+            // Prepara o objeto
+            const targetDate = new Date(route.query.date + 'T00:00:00'); // Corrige fuso
+            const targetAssignment = parseInt(route.query.assignment);
+            
+            // Calcula o fim da semana (Sexta) baseado na data da URL
+            const endDate = new Date(targetDate);
+            endDate.setDate(targetDate.getDate() + 4);
+
+            plan.value = {
+                start_date: targetDate,
+                end_date: endDate,
+                status: 'DRAFT',
+                assignment: targetAssignment,
+                recipients: [],
+                description: '',
+                attachment: null
+            };
+            
+            submitted.value = false;
+            planDialog.value = true;
+        }
 
     } catch (e) {
         console.error("Erro ao carregar:", e);

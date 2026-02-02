@@ -1,116 +1,161 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useToast } from 'primevue/usetoast';
-import api from '@/service/api';
+import { useAuthStore } from '@/stores/auth'; // Store correta
+import api from '@/service/api'; // API correta
+import DataView from 'primevue/dataview';
+import Button from 'primevue/button';
+import Tag from 'primevue/tag';
 
-const router = useRouter();
-const toast = useToast();
-
-const notifications = ref([]);
+const notificacoes = ref([]); 
 const loading = ref(true);
+const router = useRouter();
+const authStore = useAuthStore();
 
-const loadNotifications = async () => {
+const fetchNotificacoes = async () => {
     loading.value = true;
     try {
-        const { data } = await api.get('notifications/');
-        notifications.value = data.results || data;
-    } catch (e) {
-        console.error(e);
+        const response = await api.get('notifications/');
+        
+        let data = response.data;
+        // Normaliza se vier paginado ({ results: [...] }) ou lista direta
+        if (data.results) data = data.results;
+        
+        notificacoes.value = Array.isArray(data) ? data : [];
+
+    } catch (error) {
+        console.error('Erro ao buscar notificações:', error);
+        notificacoes.value = [];
     } finally {
         loading.value = false;
     }
 };
 
-const markAsRead = async (notification) => {
-    if (notification.read) return;
-    try {
-        await api.patch(`notifications/${notification.id}/mark_read/`);
-        notification.read = true;
-        // Não recarrega tudo para ser mais fluido
-    } catch (e) {
-        console.error(e);
-    }
-};
-
-const markAllRead = async () => {
+const marcarTodasLidas = async () => {
+    loading.value = true;
     try {
         await api.patch('notifications/mark_all_read/');
-        notifications.value.forEach(n => n.read = true);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Todas marcadas como lidas', life: 3000 });
-    } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao atualizar', life: 3000 });
+        // Atualiza localmente para evitar refetch desnecessário
+        notificacoes.value.forEach(n => n.read = true);
+    } catch (error) {
+        console.error("Erro ao marcar todas como lidas:", error);
+    } finally {
+        loading.value = false;
     }
 };
 
-const deleteNotification = async (id) => {
+const onNotificationClick = async (notif) => {
     try {
-        await api.delete(`notifications/${id}/`);
-        notifications.value = notifications.value.filter(n => n.id !== id);
-        toast.add({ severity: 'success', summary: 'Removido', detail: 'Notificação excluída', life: 3000 });
-    } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir', life: 3000 });
+        if (!notif.read) {
+            await api.patch(`notifications/${notif.id}/mark_read/`);
+            const index = notificacoes.value.findIndex(n => n.id === notif.id);
+            if (index !== -1) {
+                notificacoes.value[index].read = true;
+            }
+        }
+        if (notif.link) {
+            router.push(notif.link);
+        }
+    } catch (error) {
+        console.error("Erro ao marcar notificação como lida:", error);
     }
 };
 
-const openLink = (notification) => {
-    markAsRead(notification);
-    if (notification.link) {
-        router.push(notification.link);
+// Helpers Visuais (Mesma lógica do Bell para consistência)
+const getIconInfo = (titulo) => {
+    const t = (titulo || '').toLowerCase();
+    if (t.includes('atraso') || t.includes('pendente')) {
+        return { icon: 'pi pi-exclamation-triangle', bgClass: 'bg-red-100 text-red-500' };
     }
+    if (t.includes('sucesso') || t.includes('aprovado')) {
+        return { icon: 'pi pi-check-circle', bgClass: 'bg-green-100 text-green-500' };
+    }
+    // Default
+    return { icon: 'pi pi-bell', bgClass: 'bg-blue-100 text-blue-500' };
+};
+
+const formatarData = (dataString) => {
+    if (!dataString) return '';
+    return new Date(dataString).toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
 };
 
 onMounted(() => {
-    loadNotifications();
+    if (authStore.token) {
+        fetchNotificacoes();
+    } else {
+        loading.value = false;
+    }
 });
 </script>
 
 <template>
     <div class="card">
-        <div class="flex justify-content-between align-items-center mb-4">
-            <h4 class="m-0">Minhas Notificações</h4>
-            <div class="flex gap-2">
-                <Button label="Marcar todas como lidas" icon="pi pi-check-circle" class="p-button-outlined" @click="markAllRead" :disabled="notifications.length === 0" />
-                <Button icon="pi pi-refresh" class="p-button-text p-button-rounded" @click="loadNotifications" />
-            </div>
+        <div class="flex justify-between items-center mb-4">
+            <h4 class="m-0 font-bold text-xl">Todas as Notificações</h4>
+            <Button 
+                label="Marcar todas como lidas" 
+                icon="pi pi-check-circle" 
+                class="p-button-outlined p-button-secondary p-button-sm" 
+                @click="marcarTodasLidas" 
+                :loading="loading"
+                :disabled="notificacoes.length === 0"
+            />
         </div>
 
-        <div v-if="loading" class="text-center p-4">
-            <i class="pi pi-spin pi-spinner text-3xl"></i>
-        </div>
-
-        <div v-else-if="notifications.length === 0" class="text-center p-5 surface-ground border-round">
-            <i class="pi pi-bell-slash text-4xl text-gray-400 mb-3"></i>
-            <p class="text-gray-600">Você não tem notificações no momento.</p>
-        </div>
-
-        <div v-else class="flex flex-column gap-3">
-            <div v-for="item in notifications" :key="item.id" 
-                 class="p-3 border-round border-1 surface-border flex flex-column md:flex-row align-items-start md:align-items-center gap-3 transition-colors hover:surface-50"
-                 :class="{'bg-blue-50 border-blue-100': !item.read, 'surface-card': item.read}">
-                
-                <div class="flex align-items-center justify-content-center border-circle w-3rem h-3rem flex-shrink-0"
-                     :class="item.read ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-500'">
-                    <i class="pi" :class="item.read ? 'pi-envelope-open' : 'pi-envelope'"></i>
+        <DataView :value="notificacoes" layout="list" :loading="loading" dataKey="id">
+            <template #empty>
+                <div class="flex items-center justify-center bg-blue-100 dark:bg-blue-400/10 rounded-border" style="width: 2.5rem; height: 2.5rem">
+                    <i class="pi pi-bell-slash text-4xl mb-3 text-gray-400"></i>
+                    <span class="font-medium">Nenhuma notificação encontrada.</span>
                 </div>
+            </template>
 
-                <div class="flex-1 cursor-pointer" @click="openLink(item)">
-                    <div class="flex align-items-center gap-2 mb-1">
-                        <span class="font-bold text-900">{{ item.title }}</span>
-                        <span v-if="!item.read" class="bg-blue-500 text-white text-xs px-2 py-0 border-round">Nova</span>
+            <template #list="slotProps">
+                <div v-for="(item, index) in slotProps.items" :key="item.id" class="col-12">
+                    
+                    <div 
+                        class="flex flex-col md:flex-row items-start p-4 gap-4 w-full cursor-pointer hover:surface-100 transition-colors border-bottom-1 surface-border"
+                        :class="{ 'opacity-60': item.read, 'bg-blue-50': !item.read }"
+                        @click="onNotificationClick(item)"
+                    >
+                        <div class="flex items-center justify-center rounded-border" 
+                                :class="getIconInfo(item.title).bgClass" style="width: 2.5rem; height: 2.5rem">
+                            <i class="pi text-xl" :class="getIconInfo(item.title).icon"></i>
+                        </div>
+
+                        <div class="flex flex-col gap-2 flex-grow-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-base font-bold text-900">{{ item.title }}</span>
+                                <Tag v-if="!item.read" value="Nova" severity="info" class="text-xs px-2"></Tag>
+                            </div>
+                            <span class="text-700 line-height-3">{{ item.message }}</span>
+                            <span class="text-sm text-500 mt-1 flex items-center gap-1">
+                                <i class="pi pi-clock text-xs"></i>
+                                {{ formatarData(item.created_at) }}
+                            </span>
+                        </div>
+
+                        <i class="pi pi-chevron-right text-gray-400 self-center hidden md:block"></i>
                     </div>
-                    <p class="m-0 text-700 line-height-3">{{ item.message }}</p>
-                    <small class="text-gray-500 mt-2 block">
-                        <i class="pi pi-clock text-xs mr-1"></i>
-                        {{ new Date(item.created_at).toLocaleString('pt-BR') }}
-                    </small>
-                </div>
 
-                <div class="flex gap-2 ml-auto">
-                    <Button v-if="!item.read" icon="pi pi-check" class="p-button-rounded p-button-text p-button-sm" v-tooltip="'Marcar como lida'" @click="markAsRead(item)" />
-                    <Button icon="pi pi-trash" class="p-button-rounded p-button-text p-button-danger p-button-sm" v-tooltip="'Excluir'" @click="deleteNotification(item.id)" />
                 </div>
-            </div>
-        </div>
+            </template>
+        </DataView>
     </div>
 </template>
+
+<style scoped>
+/* Remove padding padrão do DataView para ficar full-width */
+:deep(.p-dataview-content) {
+    background: transparent !important;
+    border: none !important;
+}
+:deep(.p-dataview .p-dataview-header) {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+</style>

@@ -1,8 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
+const route = useRoute();
 const toast = useToast();
 const plans = ref([]);
 const loading = ref(true);
@@ -20,7 +22,8 @@ const filters = ref({
     status: null,
     teacher: null,
     classroom: null,
-    subject: null
+    subject: null,
+    assignment: null
 });
 
 const statusOptions = ref([
@@ -73,13 +76,18 @@ const loadPlans = async () => {
     loading.value = true;
     try {
         let query = 'lesson-plans/?';
+
+        if (route.query.assignment) {
+            query += `&assignment=${route.query.assignment}`;
+        } else {
         
-        // Mapeia filtros do front para os filtros do Django (filterset_fields)
-        if (filters.value.status) query += `&status=${filters.value.status}`;
-        if (filters.value.teacher) query += `&assignment__teacher=${filters.value.teacher}`;
-        if (filters.value.classroom) query += `&assignment__classroom=${filters.value.classroom}`;
-        if (filters.value.subject) query += `&assignment__subject=${filters.value.subject}`;
-        
+            // Mapeia filtros do front para os filtros do Django (filterset_fields)
+            if (filters.value.status) query += `&status=${filters.value.status}`;
+            if (filters.value.teacher) query += `&assignment__teacher=${filters.value.teacher}`;
+            if (filters.value.classroom) query += `&assignment__classroom=${filters.value.classroom}`;
+            if (filters.value.subject) query += `&assignment__subject=${filters.value.subject}`;
+        }
+
         const { data } = await api.get(query);
         plans.value = data.results || data;
     } catch (e) {
