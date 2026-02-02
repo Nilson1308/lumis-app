@@ -1,7 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import Segment, ClassRoom, Subject, Guardian, Student, Enrollment, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity
-
+from .models import (
+    Segment, ClassRoom, Subject, Guardian, Student, Enrollment,
+    TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
+    TaughtContent
+)
 User = get_user_model()
 
 class SegmentSerializer(serializers.ModelSerializer):
@@ -235,3 +238,12 @@ class StudentHealthUpdateSerializer(serializers.ModelSerializer):
             'medications',
             'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state' 
         ]
+
+class TaughtContentSerializer(serializers.ModelSerializer):
+    # Campos auxiliares apenas para leitura (display)
+    subject_name = serializers.CharField(source='assignment.subject.name', read_only=True)
+    classroom_name = serializers.CharField(source='assignment.classroom.name', read_only=True)
+
+    class Meta:
+        model = TaughtContent
+        fields = ['id', 'assignment', 'date', 'content', 'homework', 'created_at', 'subject_name', 'classroom_name']

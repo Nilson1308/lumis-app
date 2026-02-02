@@ -11,14 +11,18 @@ from django.db.models import Count, Avg, Q
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
 User = get_user_model()
-from .models import Segment, ClassRoom, Guardian, Student, Enrollment, Subject, TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity
+from .models import (
+    Segment, ClassRoom, Guardian, Student, Enrollment, Subject,
+    TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
+    TaughtContent
+)
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
     EnrollmentSerializer, SubjectSerializer, TeacherAssignmentSerializer,
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
     GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
-    ExtraActivitySerializer
+    ExtraActivitySerializer, TaughtContentSerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 
@@ -513,3 +517,19 @@ class AbsenceJustificationViewSet(viewsets.ModelViewSet):
         # 2. SEGURANÇA: Força status PENDING na criação (Pai enviando)
         # Assim, mesmo que ele mande "status": "APPROVED", será ignorado e salvo como PENDING.
         serializer.save(status='PENDING')
+
+class TaughtContentViewSet(viewsets.ModelViewSet):
+    queryset = TaughtContent.objects.all()
+    serializer_class = TaughtContentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filterset_fields = ['assignment', 'date'] # Permite filtrar por ID da atribuição ou data na URL
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = super().get_queryset()
+
+        # Se for professor, filtra apenas os conteúdos vinculados às suas atribuições
+        if user.groups.filter(name='Professores').exists():
+            return queryset.filter(assignment__teacher=user)
+        
+        return queryset

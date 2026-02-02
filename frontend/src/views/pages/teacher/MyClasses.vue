@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router'; // Para navegar ao clicar no card
+import { useRouter } from 'vue-router';
 import api from '@/service/api';
 
 const router = useRouter();
@@ -10,7 +10,6 @@ const loading = ref(true);
 const fetchMyClasses = async () => {
     loading.value = true;
     try {
-        // Chama a rota personalizada que criamos agora
         const response = await api.get('assignments/my_classes/');
         myClasses.value = response.data;
     } catch (error) {
@@ -21,7 +20,6 @@ const fetchMyClasses = async () => {
 };
 
 const openClassroom = (assignment) => {
-    // Agora navega para a rota real usando o ID da atribuição
     router.push({ 
         name: 'class-gradebook', 
         params: { id: assignment.id } 
@@ -36,17 +34,24 @@ const openAttendance = (assignment) => {
 };
 
 const openPlanning = (assignment) => {
-    // Redireciona para a lista de planejamentos, mas passando o ID na URL
     router.push({ 
         name: 'lesson-plans', 
         query: { assignment: assignment.id } 
     });
 };
 
+// --- NOVO MÉTODO ---
+const openDiary = (assignment) => {
+    router.push({
+        name: 'class-diary',
+        params: { id: assignment.id }
+    });
+};
+
 const openObservations = (assignment) => {
     router.push({ 
         name: 'teacher-observations', 
-        query: { assignment: assignment.id } // Passa o ID da aula na URL
+        query: { assignment: assignment.id }
     });
 };
 
@@ -58,9 +63,7 @@ onMounted(() => {
 <template>
     <div class="mb-4">
         <div class="card mb-0">
-            <div class="flex justify-content-between mb-3">
-                <span class="block text-500 font-medium mb-3">Portal do Professor</span>
-            </div>
+            <span class="block text-500 font-medium mb-3">Portal do Professor</span>
             <div class="text-900 font-medium text-xl">Minhas Turmas & Diários</div>
         </div>
     </div>
@@ -78,7 +81,7 @@ onMounted(() => {
 
     <div v-else class="grid grid-cols-12 gap-6">
         <div class="col-span-12 lg:col-span-3 xl:col-span-3" v-for="item in myClasses" :key="item.id">
-            <div class="card">
+            <div class="card h-full flex flex-col">
                 <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">{{ item.subject_name }}</span>
@@ -88,13 +91,15 @@ onMounted(() => {
                         <i class="pi pi-book text-purple-500 text-xl"></i>
                     </div>
                 </div>
+                
                 <Divider/>
+                
                 <div class="mt-auto grid grid-cols-2 gap-2">
                     <div class="col-span-2 relative">
                         <Button 
-                            label="Feedbacks / Observações" 
+                            label="Feedbacks / Obs" 
                             icon="pi pi-envelope" 
-                            class="p-button-outlined w-full p-button-secondary" 
+                            class="p-button-outlined w-full p-button-secondary p-button-sm" 
                             @click="openObservations(item)"
                         />
                         <span v-if="item.unread_count > 0" 
@@ -117,12 +122,24 @@ onMounted(() => {
                         @click="openAttendance(item)" 
                     />
                     
-                    <Button
-                        label="Planejamento" 
-                        icon="pi pi-list" 
-                        class="p-button-outlined p-button-sm col-span-2" 
-                        @click="openPlanning(item)" 
-                    />
+                    <div class="col-span-2 relative">
+                        <Button
+                            label="Diário de Classe"
+                            icon="pi pi-bookmark"
+                            class="p-button-outlined p-button-sm"
+                            @click="openDiary(item)"
+                            fluid
+                        />
+                    </div>
+                    <div class="col-span-2 relative">
+                        <Button
+                            label="Planejamento Semanal" 
+                            icon="pi pi-list" 
+                            class="p-button-outlined p-button-sm" 
+                            @click="openPlanning(item)"
+                            fluid
+                        />
+                    </div>
                 </div>
             </div>
         </div>

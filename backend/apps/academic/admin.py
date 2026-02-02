@@ -3,7 +3,7 @@ from .models import (
     Segment, ClassRoom, Subject, Enrollment, 
     TeacherAssignment, Student, Guardian, 
     Grade, Attendance, AcademicPeriod, LessonPlan,
-    ExtraActivity
+    ExtraActivity, TaughtContent
 )
 
 # --- CONFIGURAÇÕES AUXILIARES ---
@@ -110,3 +110,30 @@ class LessonPlanAdmin(admin.ModelAdmin):
     @admin.display(description='Matéria')
     def get_subject(self, obj):
         return f"{obj.assignment.subject.name} ({obj.assignment.classroom.name})"
+
+@admin.register(TaughtContent)
+class TaughtContentAdmin(admin.ModelAdmin):
+    list_display = ('date', 'get_classroom', 'get_subject', 'get_teacher', 'content_preview')
+    list_filter = ('date', 'assignment__classroom', 'assignment__subject', 'assignment__teacher')
+    search_fields = ('content', 'assignment__classroom__name', 'assignment__teacher__username', 'assignment__teacher__first_name')
+    date_hierarchy = 'date'
+    ordering = ('-date',)
+
+    def get_classroom(self, obj):
+        return obj.assignment.classroom.name
+    get_classroom.short_description = "Turma"
+
+    def get_subject(self, obj):
+        return obj.assignment.subject.name
+    get_subject.short_description = "Matéria"
+    
+    def get_teacher(self, obj):
+        # Tenta pegar o nome completo, senão usa o login
+        return obj.assignment.teacher.get_full_name() or obj.assignment.teacher.username
+    get_teacher.short_description = "Professor"
+
+    def content_preview(self, obj):
+        # Mostra só os primeiros 50 caracteres para não poluir a tabela
+        clean_content = obj.content or ""
+        return (clean_content[:75] + '...') if len(clean_content) > 75 else clean_content
+    content_preview.short_description = "Conteúdo Ministrado"

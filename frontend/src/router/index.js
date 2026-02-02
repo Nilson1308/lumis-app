@@ -103,6 +103,12 @@ const router = createRouter({
                     component: () => import('@/views/pages/teacher/AttendanceClass.vue')
                 },
                 {
+                    path: '/teacher/classes/:id/diary', 
+                    name: 'class-diary',
+                    component: () => import('@/views/pages/teacher/ClassDiary.vue'),
+                    props: true
+                },
+                {
                     path: '/professor/observacoes',
                     name: 'teacher-observations',
                     component: () => import('@/views/pages/teacher/TeacherObservations.vue')

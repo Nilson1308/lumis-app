@@ -295,3 +295,23 @@ class LessonPlan(models.Model):
 
     def __str__(self):
         return f"Semana {self.start_date} - {self.assignment}"
+
+class TaughtContent(models.Model):
+    """Registro diário do Conteúdo Ministrado"""
+    assignment = models.ForeignKey(TeacherAssignment, on_delete=models.CASCADE, verbose_name="Atribuição")
+    date = models.DateField("Data da Aula")
+    content = models.TextField("Conteúdo Trabalhado")
+    homework = models.TextField("Lição de Casa / Tarefa", blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Conteúdo Ministrado"
+        verbose_name_plural = "Conteúdos Ministrados"
+        ordering = ['-date']
+        # Garante que não haja dois registros para a mesma aula/dia (opcional, mas recomendado)
+        unique_together = ('assignment', 'date') 
+
+    def __str__(self):
+        return f"{self.date} - {self.assignment}"
