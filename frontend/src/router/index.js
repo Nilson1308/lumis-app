@@ -30,6 +30,12 @@ const router = createRouter({
                     name: 'notifications',
                     component: () => import('@/views/pages/Notifications.vue')
                 },
+                {
+                    path: '/calendar',
+                    name: 'calendar',
+                    component: () => import('@/views/pages/CalendarView.vue'),
+                    meta: { breadcrumb: 'Calendário' }
+                },
 
                 // --- PORTAL DA FAMÍLIA ---
                 {
@@ -84,6 +90,12 @@ const router = createRouter({
                     path: '/assignments',
                     name: 'assignments',
                     component: () => import('@/views/pages/AssignmentList.vue')
+                },
+                {
+                    path: '/assignments',
+                    name: 'assignments',
+                    component: () => import('@/views/pages/TeacherAssignmentList.vue'),
+                    meta: { breadcrumb: 'Atribuição de Aulas' }
                 },
 
                 // --- PORTAL DO PROFESSOR ---

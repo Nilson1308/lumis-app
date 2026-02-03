@@ -315,3 +315,53 @@ class TaughtContent(models.Model):
 
     def __str__(self):
         return f"{self.date} - {self.assignment}"
+
+class SchoolEvent(models.Model):
+    EVENT_TYPES = [
+        ('HOLIDAY', 'Feriado / Recesso'),
+        ('SCHOOL_DAY', 'Dia Letivo Especial'), # Ex: Sábado letivo
+        ('EXAM', 'Prova / Avaliação'),
+        ('ASSIGNMENT', 'Entrega de Trabalho'),
+        ('EVENT', 'Evento / Festa'),
+        ('MEETING', 'Reunião Pedagógica'),
+    ]
+
+    TARGET_AUDIENCE = [
+        ('ALL', 'Toda a Escola (Público)'),
+        ('TEACHERS', 'Apenas Professores/Staff'),
+        ('CLASSROOM', 'Turma Específica'),
+    ]
+
+    title = models.CharField("Título", max_length=200)
+    description = models.TextField("Descrição", blank=True, null=True)
+    
+    start_time = models.DateTimeField("Início")
+    end_time = models.DateTimeField("Fim", blank=True, null=True)
+    
+    event_type = models.CharField("Tipo de Evento", max_length=20, choices=EVENT_TYPES, default='EVENT')
+    target_audience = models.CharField("Público Alvo", max_length=20, choices=TARGET_AUDIENCE, default='ALL')
+    
+    # Relacionamentos Opcionais
+    # Se for PROVA ou TRABALHO para uma turma específica:
+    classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, null=True, blank=True, related_name='events', verbose_name="Turma")
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='events', verbose_name="Matéria")
+    
+    # Campo de controle (quem criou)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='created_events'
+    )
+
+    class Meta:
+        verbose_name = "Evento / Calendário"
+        verbose_name_plural = "Calendário Escolar"
+        ordering = ['start_time']
+
+    def __str__(self):
+        return f"{self.get_event_type_display()}: {self.title} ({self.start_time.strftime('%d/%m')})"

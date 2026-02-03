@@ -3,7 +3,7 @@ from .models import (
     Segment, ClassRoom, Subject, Enrollment, 
     TeacherAssignment, Student, Guardian, 
     Grade, Attendance, AcademicPeriod, LessonPlan,
-    ExtraActivity, TaughtContent
+    ExtraActivity, TaughtContent, SchoolEvent
 )
 
 # --- CONFIGURAÇÕES AUXILIARES ---
@@ -137,3 +137,8 @@ class TaughtContentAdmin(admin.ModelAdmin):
         clean_content = obj.content or ""
         return (clean_content[:75] + '...') if len(clean_content) > 75 else clean_content
     content_preview.short_description = "Conteúdo Ministrado"
+
+@admin.register(SchoolEvent)
+class SchoolEventAdmin(admin.ModelAdmin):
+    list_display = ('title', 'start_time', 'event_type', 'target_audience')
+    list_filter = ('event_type', 'target_audience')

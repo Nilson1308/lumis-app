@@ -1,4 +1,4 @@
-from rest_framework import viewsets, permissions, filters
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -10,11 +10,12 @@ from django.db import transaction
 from django.db.models import Count, Avg, Q
 from django.contrib.auth import get_user_model
 from django_filters.rest_framework import DjangoFilterBackend
+from apps.core.pagination import LargeResultsSetPagination
 User = get_user_model()
 from .models import (
     Segment, ClassRoom, Guardian, Student, Enrollment, Subject,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent
+    TaughtContent, SchoolEvent
 )
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
@@ -22,7 +23,7 @@ from .serializers import (
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
     GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
-    ExtraActivitySerializer, TaughtContentSerializer
+    ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 
@@ -38,6 +39,10 @@ class SegmentViewSet(viewsets.ModelViewSet):
 class ClassRoomViewSet(viewsets.ModelViewSet):
     queryset = ClassRoom.objects.all()
     serializer_class = ClassRoomSerializer
+    pagination_class = LargeResultsSetPagination
+
+    search_fields = ['name', 'year']
+    ordering_fields = ['year', 'name']
 
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.all().order_by('name')
@@ -240,11 +245,14 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all().order_by('name')
     serializer_class = SubjectSerializer
+    pagination_class = LargeResultsSetPagination
+    
     search_fields = ['name']
 
 class TeacherAssignmentViewSet(viewsets.ModelViewSet):
     queryset = TeacherAssignment.objects.all().order_by('classroom', 'subject')
     serializer_class = TeacherAssignmentSerializer
+    pagination_class = LargeResultsSetPagination
     
     # Filtros exatos (Dropdowns)
     filterset_fields = ['teacher', 'classroom', 'subject']
@@ -261,9 +269,10 @@ class TeacherAssignmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         queryset = TeacherAssignment.objects.all()
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
 
         # Se for Superusuário ou Coordenador (Via Grupo!), vê tudo
-        if user.is_superuser or user.groups.filter(name='Coordenacao').exists():
+        if user.is_superuser or user.groups.filter(name__in=power_groups).exists():
             return queryset
         
         # Se for Professor, só vê as SUAS
@@ -533,3 +542,106 @@ class TaughtContentViewSet(viewsets.ModelViewSet):
             return queryset.filter(assignment__teacher=user)
         
         return queryset
+
+class SchoolEventViewSet(viewsets.ModelViewSet):
+    serializer_class = SchoolEventSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        # --- DEBUG LOG (Vai aparecer no seu terminal onde roda o runserver) ---
+        print(f"\n--- DEBUG CALENDÁRIO ---")
+        print(f"Usuário: {user.username}")
+        print(f"Grupos: {[g.name for g in user.groups.all()]}")
+        print(f"Superuser: {user.is_superuser}")
+        # ---------------------------------------------------------------------
+
+        queryset = SchoolEvent.objects.all().order_by('start_time')
+
+        start = self.request.query_params.get('start')
+        end = self.request.query_params.get('end')
+        if start and end:
+            queryset = queryset.filter(start_time__range=[start, end])
+
+        # 1. COORDENADORES / DIREÇÃO / SECRETARIA
+        power_groups = [
+            'Coordenadores', 'Coordenação', 'Coordenacao', 
+            'Direção', 'Direcao', 'Diretoria',
+            'Secretaria'
+        ]
+        
+        # Verifica se tem intersecção entre os grupos do usuário e a lista de poder
+        user_groups = set(user.groups.values_list('name', flat=True))
+        is_power_user = user.is_superuser or bool(set(power_groups) & user_groups)
+
+        if is_power_user:
+            print(">>> ACESSO TOTAL CONCEDIDO (Power User)")
+            print(f"Total Eventos Retornados: {queryset.count()}")
+            return queryset 
+
+        # 2. PROFESSORES
+        if user.groups.filter(name='Professores').exists():
+            print(">>> ACESSO PROFESSOR")
+            return queryset.filter(target_audience__in=['ALL', 'TEACHERS', 'CLASSROOM'])
+
+        # 3. RESPONSÁVEIS
+        if user.groups.filter(name__in=['Responsáveis', 'Responsaveis', 'Pais']).exists():
+            print(">>> ACESSO RESPONSÁVEL")
+            guardian = Guardian.objects.filter(user=user).first()
+            if not guardian:
+                return queryset.filter(target_audience='ALL')
+
+            student_ids = guardian.students.values_list('id', flat=True)
+            my_classrooms_ids = Enrollment.objects.filter(
+                student__id__in=student_ids
+            ).values_list('classroom_id', flat=True).distinct()
+            
+            print(f"Turmas do Filho: {list(my_classrooms_ids)}")
+            
+            return queryset.filter(
+                Q(target_audience='ALL') | 
+                Q(target_audience='CLASSROOM', classroom__id__in=my_classrooms_ids)
+            ).distinct()
+
+        # 4. PADRÃO
+        print(">>> ACESSO PADRÃO (Apenas Público)")
+        return queryset.filter(target_audience='ALL')
+
+    # --- REGISTRA O AUTOR ---
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    # --- CONTROLE DE EDIÇÃO ---
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self.can_edit(request.user, instance):
+             return Response({'error': 'Ação não permitida.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not self.can_edit(request.user, instance):
+             return Response({'error': 'Ação não permitida.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
+    def can_edit(self, user, event):
+        # 1. Admin / Coordenação / Direção -> MEXE EM TUDO
+        # Adicionei 'Coordenacao' e 'Direcao' (sem acento)
+        power_editors = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Direcao', 'Diretoria']
+        
+        if user.is_superuser or user.groups.filter(name__in=power_editors).exists():
+            return True
+        
+        # 2. Secretaria -> MEXE NO PÚBLICO, BLOQUEIA PROVAS ALHEIAS
+        if user.groups.filter(name='Secretaria').exists():
+            if event.event_type in ['EXAM', 'ASSIGNMENT'] and event.created_by != user:
+                return False
+            return True 
+        
+        # 3. Professores -> SÓ MEXE NO QUE ELE CRIOU
+        if user.groups.filter(name='Professores').exists():
+            return event.created_by == user
+            
+        return False

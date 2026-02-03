@@ -13,7 +13,10 @@ watchEffect(() => {
         // 1. DASHBOARD (Todos vêem)
         newMenu.push({
             label: 'Home',
-            items: [{ label: 'Dashboard', icon: 'pi pi-fw pi-home', to: { name: 'dashboard' } }]
+            items: [
+                { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: { name: 'dashboard' } },
+                { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'calendar' } },
+                ]
         });
     }
     // 2. PORTAL DA FAMÍLIA (Exclusivo para Pais)
@@ -21,6 +24,7 @@ watchEffect(() => {
         newMenu.push({
             label: 'Portal da Família',
             items: [
+                { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'calendar' } },
                 { label: 'Meus Filhos', icon: 'pi pi-fw pi-users', to: { name: 'parent-dashboard' } },
                 { 
                     label: 'Meus Dados', 
@@ -37,10 +41,11 @@ watchEffect(() => {
             label: 'Acadêmico',
             items: [
                 { label: 'Matrículas', icon: 'pi pi-fw pi-id-card', to: { name: 'enrollments' } },
-                { label: 'Alunos', icon: 'pi pi-fw pi-user', to: { name: 'students-list' } },
+                { label: 'Alunos', icon: 'pi pi-graduation-cap', to: { name: 'students-list' } },
                 { label: 'Responsáveis', icon: 'pi pi-fw pi-users', to: { name: 'guardians-list' } }, // Novo
                 { label: 'Turmas', icon: 'pi pi-fw pi-table', to: { name: 'classrooms' } },
-                { label: 'Matérias', icon: 'pi pi-fw pi-book', to: { name: 'subjects' } }
+                { label: 'Matérias', icon: 'pi pi-fw pi-book', to: { name: 'subjects' } },
+                { label: 'Atribuições', icon: 'pi pi-fw pi-user', to: { name: 'assignments' } }
             ]
         });
     }

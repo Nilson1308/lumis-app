@@ -1,4 +1,5 @@
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.models import Group
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
@@ -9,6 +10,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from apps.core.pagination import LargeResultsSetPagination
 from .models import SchoolAccount, Notification
 from .serializers import UserSerializer, SchoolAccountSerializer, NotificationSerializer
 
@@ -136,8 +138,20 @@ class PasswordResetConfirmView(APIView):
             return Response({'error': 'Token inválido ou expirado'}, status=status.HTTP_400_BAD_REQUEST)
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerializer # <--- Garanta que está usando o Serializer correto
+    queryset = User.objects.all().order_by('first_name')
+    serializer_class = UserSerializer
+    # Adicione a paginação 'Gigante' aqui também para garantir que venham todos
+    pagination_class = LargeResultsSetPagination 
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtro por Nome do Grupo (ex: ?group=Professores)
+        group_name = self.request.query_params.get('group')
+        if group_name:
+            queryset = queryset.filter(groups__name=group_name)
+            
+        return queryset
 
     # Endpoint 'me' para retornar o usuário logado
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])

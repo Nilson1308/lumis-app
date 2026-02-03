@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     Segment, ClassRoom, Subject, Guardian, Student, Enrollment,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent
+    TaughtContent, SchoolEvent
 )
 User = get_user_model()
 
@@ -123,6 +123,11 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TeacherAssignment
         fields = ['id', 'teacher', 'teacher_name', 'subject', 'subject_name', 'classroom', 'classroom_name', 'classroom_year', 'unread_count']
+
+    def get_teacher_name(self, obj):
+        if obj.teacher:
+            return obj.teacher.get_full_name() or obj.teacher.username
+        return "Não atribuído"
 
 class GradeSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
@@ -247,3 +252,11 @@ class TaughtContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaughtContent
         fields = ['id', 'assignment', 'date', 'content', 'homework', 'created_at', 'subject_name', 'classroom_name']
+
+class SchoolEventSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='classroom.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+
+    class Meta:
+        model = SchoolEvent
+        fields = '__all__'

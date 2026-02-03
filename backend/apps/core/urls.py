@@ -10,6 +10,6 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 urlpatterns = [
     path('', include(router.urls)),
     path('school-config/', SchoolConfigView.as_view(), name='school-config'),
-        path('password_reset/', PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('password_reset/', PasswordResetRequestView.as_view(), name='password_reset_request'),
     path('password_reset_confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
 ]
