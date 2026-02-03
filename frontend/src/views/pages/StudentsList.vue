@@ -1,13 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
-import { FilterMatchMode } from '@primevue/core/api'; // Certifique-se que o FilterMatchMode é importado
+import { FilterMatchMode } from '@primevue/core/api'; 
 import api from '@/service/api';
 
 const toast = useToast();
 const students = ref([]);
 const guardians = ref([]);
-const extraActivities = ref([]); // Lista de atividades
+const extraActivities = ref([]); 
 const student = ref({});
 const studentDialog = ref(false);
 const deleteStudentDialog = ref(false);
@@ -21,9 +21,9 @@ const lazyParams = ref({
     rows: 10
 });
 
-// Filtro Local para Datatable (O Backend usa ?search=, aqui é só visual se quiser, mas vamos focar no backend)
+// Filtro Local
 const filters = ref({
-    global: { value: '' }
+    global: { value: '', matchMode: FilterMatchMode.CONTAINS }
 });
 
 // Opções para Selects
@@ -48,7 +48,6 @@ const loadData = async () => {
         
         let query = `students/?page=${page}&page_size=${rows}`;
         
-        // Verifica se existe valor e se não é só espaço em branco
         const searchValue = filters.value.global.value;
         if (searchValue && searchValue.trim() !== '') {
             query += `&search=${searchValue}`;
@@ -69,7 +68,7 @@ const loadData = async () => {
         }
 
         if (extraActivities.value.length === 0) {
-            const resActivities = await api.get('extra-activities/'); // Ajuste a rota se necessário
+            const resActivities = await api.get('extra-activities/'); 
             extraActivities.value = resActivities.data.results || resActivities.data;
         }
 
@@ -88,7 +87,6 @@ const onPage = (event) => {
 };
 
 const onSearch = () => {
-    // Reseta para a primeira página ao buscar
     lazyParams.value.page = 1;
     loadData();
 }
@@ -131,7 +129,6 @@ const editStudent = (prod) => {
         student.value.birth_date = new Date(parts[0], parts[1] - 1, parts[2]);
     }
 
-    // Tratamento Guardians (Array de IDs)
     if (student.value.guardians && Array.isArray(student.value.guardians)) {
         if (student.value.guardians.length > 0 && typeof student.value.guardians[0] === 'object') {
             student.value.guardians = student.value.guardians.map(g => g.id);
@@ -140,7 +137,6 @@ const editStudent = (prod) => {
         student.value.guardians = [];
     }
 
-    // Tratamento Extra Activities (Array de IDs - se vier details do backend)
     if (student.value.extra_activities_details) {
         student.value.extra_activities = student.value.extra_activities_details.map(a => a.id);
     } else if (!student.value.extra_activities) {
@@ -156,7 +152,6 @@ const confirmDeleteStudent = (prod) => {
 };
 
 const onFileSelect = (event, field) => {
-    // Guarda o arquivo selecionado no objeto student
     student.value[field] = event.files[0];
 };
 
@@ -164,15 +159,13 @@ const saveStudent = async () => {
     submitted.value = true;
     if (student.value.name && student.value.registration_number) {
         
-        // --- USANDO FORMDATA PARA ARQUIVOS ---
         const formData = new FormData();
         
-        // Dados Simples
         const simpleFields = [
             'name', 'registration_number', 'birth_date', 'gender', 'cpf', 'rg', 'nationality',
             'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
             'allergies', 'medications', 'emergency_contact',
-            'period', 'meals', 'is_full_time' // Novos campos
+            'period', 'meals', 'is_full_time'
         ];
 
         simpleFields.forEach(field => {
@@ -180,7 +173,6 @@ const saveStudent = async () => {
             if (field === 'birth_date' && val instanceof Date) {
                 val = val.toISOString().split('T')[0];
             }
-            // Booleanos precisam ser string 'true'/'false' ou 1/0 para o Django Multipart
             if (field === 'is_full_time') {
                 val = val ? 'true' : 'false';
             }
@@ -189,7 +181,6 @@ const saveStudent = async () => {
             }
         });
 
-        // Arrays (ManyToMany)
         if (student.value.guardians) {
             student.value.guardians.forEach(id => formData.append('guardians', id));
         }
@@ -197,7 +188,6 @@ const saveStudent = async () => {
             student.value.extra_activities.forEach(id => formData.append('extra_activities', id));
         }
 
-        // Arquivos (Só anexa se for objeto File novo)
         if (student.value.medical_report instanceof File) {
             formData.append('medical_report', student.value.medical_report);
         }
@@ -371,7 +361,7 @@ onMounted(() => {
                                 
                                 <div class="col-span-12 md:col-span-6 flex items-center">
                                     <div class="flex items-center gap-2 mt-6">
-                                        <InputSwitch v-model="student.is_full_time" inputId="fulltime" />
+                                        <ToggleSwitch v-model="student.is_full_time" inputId="fulltime" />
                                         <label for="fulltime" class="font-bold cursor-pointer">Aluno Integral?</label>
                                     </div>
                                 </div>
@@ -449,15 +439,50 @@ onMounted(() => {
                             <div class="grid grid-cols-12 gap-4">
                                 <div class="col-span-12 md:col-span-6">
                                     <label class="block font-bold mb-3">Laudo Médico (PDF/IMG)</label>
-                                    <FileUpload mode="basic" name="medical_report" accept="image/*,.pdf" :maxFileSize="2000000" @select="(e) => onFileSelect(e, 'medical_report')" :auto="false" chooseLabel="Anexar Arquivo" />
-                                    <small v-if="student.medical_report && typeof student.medical_report === 'string'" class="text-green-600 block mt-2">
-                                        <i class="pi pi-file mr-1"></i> Arquivo já enviado.
-                                    </small>
+                                    <FileUpload 
+                                        mode="basic" 
+                                        name="medical_report" 
+                                        accept="image/*,.pdf" 
+                                        :maxFileSize="2000000" 
+                                        @select="(e) => onFileSelect(e, 'medical_report')" 
+                                        :auto="false" 
+                                        chooseLabel="Anexar Arquivo" 
+                                    />
+                                    
+                                    <div v-if="student.medical_report && typeof student.medical_report === 'string'" 
+                                        class="mt-3 p-2 bg-gray-50 border border-gray-200 rounded flex items-center gap-2">
+                                        <i class="pi pi-check-circle text-green-500 text-xl"></i>
+                                        <div class="flex flex-col">
+                                            <span class="text-xs text-gray-500 font-semibold">ARQUIVO ATUAL</span>
+                                            <a :href="student.medical_report" target="_blank" class="text-primary font-bold hover:underline flex items-center">
+                                                Visualizar Laudo <i class="pi pi-external-link ml-1 text-xs"></i>
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                                 
                                 <div class="col-span-12 md:col-span-6">
                                     <label class="block font-bold mb-3">Receita Médica</label>
-                                    <FileUpload mode="basic" name="prescription" accept="image/*,.pdf" :maxFileSize="2000000" @select="(e) => onFileSelect(e, 'prescription')" :auto="false" chooseLabel="Anexar Receita" />
+                                    <FileUpload 
+                                        mode="basic" 
+                                        name="prescription" 
+                                        accept="image/*,.pdf" 
+                                        :maxFileSize="2000000" 
+                                        @select="(e) => onFileSelect(e, 'prescription')" 
+                                        :auto="false" 
+                                        chooseLabel="Anexar Receita" 
+                                    />
+
+                                    <div v-if="student.prescription && typeof student.prescription === 'string'" 
+                                        class="mt-3 p-2 bg-gray-50 border border-gray-200 rounded flex items-center gap-2">
+                                        <i class="pi pi-check-circle text-green-500 text-xl"></i>
+                                        <div class="flex flex-col">
+                                            <span class="text-xs text-gray-500 font-semibold">ARQUIVO ATUAL</span>
+                                            <a :href="student.prescription" target="_blank" class="text-primary font-bold hover:underline flex items-center">
+                                                Visualizar Receita <i class="pi pi-external-link ml-1 text-xs"></i>
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </TabPanel>
@@ -494,12 +519,12 @@ onMounted(() => {
 
             <Dialog v-model:visible="deleteStudentDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
                 <div class="flex align-items-center justify-content-center">
-                    <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
+                    <i class="pi pi-exclamation-triangle mr-3 text-yellow-500" style="font-size: 2rem" />
                     <span>Deseja remover este aluno?</span>
                 </div>
                 <template #footer>
                     <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteStudentDialog = false" />
-                    <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteStudent" />
+                    <Button label="Sim" icon="pi pi-check" class="p-button-text p-button-danger" @click="deleteStudent" />
                 </template>
             </Dialog>
         </div>

@@ -32,7 +32,7 @@ watchEffect(() => {
     }
 
     // 2. ACADÊMICO (Secretaria / Coordenação / Admin)
-    if (authStore.isAdmin || authStore.isCoordinator) {
+    if (authStore.isAdmin || authStore.isCoordinator  || authStore.isSecretary) {
         newMenu.push({
             label: 'Acadêmico',
             items: [
@@ -43,7 +43,9 @@ watchEffect(() => {
                 { label: 'Matérias', icon: 'pi pi-fw pi-book', to: { name: 'subjects' } }
             ]
         });
+    }
 
+    if (authStore.isCoordinator || authStore.isAdmin) {
         newMenu.push({
             label: 'Coordenação',
             items: [

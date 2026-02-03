@@ -42,10 +42,12 @@ services:
     container_name: lumis_frontend_prod
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       # Monta os mesmos volumes para o Nginx poder servir os arquivos
       - static_volume:/app/staticfiles
       - media_volume:/app/media
+      - /etc/letsencrypt:/etc/letsencrypt
     depends_on:
       - backend
     restart: always

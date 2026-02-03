@@ -1,14 +1,15 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
+import { FilterMatchMode } from '@primevue/core/api'; // Importação do filtro
 import api from '@/service/api';
 
 const toast = useToast();
 
 // --- ESTADOS ---
 const enrollments = ref([]);
-const allClassrooms = ref([]); // Todas as turmas do banco
-const availableYears = ref([]); // Anos extraídos das turmas (ex: [2024, 2025])
+const allClassrooms = ref([]); 
+const availableYears = ref([]); 
 const students = ref([]);
 const loading = ref(false);
 const printDialog = ref(false);
@@ -25,9 +26,9 @@ const enrollment = ref({});
 const enrollmentDialog = ref(false);
 const deleteDialog = ref(false);
 
-// --- FILTROS DA TABELA (Busca Local) ---
+// --- FILTROS DA TABELA ---
 const filters = ref({
-    global: { value: null, matchMode: 'contains' } // <--- Use a string direta 'contains'
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS } // Uso da constante correta
 });
 
 // --- COMPUTED: Filtrar turmas pelo ano selecionado ---
@@ -41,20 +42,18 @@ const loadPrintOptions = async () => {
     try {
         const res = await api.get('periods/');
         const periods = res.data.results || res.data;
-        
-        // Monta as opções do Dropdown
         printOptions.value = [
-            { name: 'Boletim Final (Todos os Períodos)', id: null }, // ID null = Final
-            ...periods // Espalha os bimestres (1º Bim, 2º Bim...)
+            { name: 'Boletim Final (Todos os Períodos)', id: null }, 
+            ...periods 
         ];
     } catch (e) { console.error(e); }
 };
 
-// Abre o modal
+// Abre o modal de impressão
 const openPrintDialog = (enrollmentId) => {
     studentToPrint.value = enrollmentId;
-    selectedPrintPeriod.value = null; // Padrão: Final
-    if (printOptions.value.length === 0) loadPrintOptions(); // Carrega se não tiver
+    selectedPrintPeriod.value = null; 
+    if (printOptions.value.length === 0) loadPrintOptions(); 
     printDialog.value = true;
 };
 
@@ -110,9 +109,15 @@ watch(selectedClassroom, () => {
 
 // --- API: BUSCAR ALUNOS (Para o cadastro) ---
 const fetchStudents = async () => {
-    if (students.value.length > 0) return;
-    const res = await api.get('students/?page_size=1000'); // Limite alto para busca local no dropdown
-    students.value = res.data.results;
+    // Só carrega se ainda não tiver carregado
+    if (students.value.length === 0) {
+        try {
+            const res = await api.get('students/?page_size=1000'); 
+            students.value = res.data.results;
+        } catch (e) {
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar lista de alunos.' });
+        }
+    }
 };
 
 // --- AÇÕES ---
@@ -121,7 +126,10 @@ const openNew = async () => {
         toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione uma turma primeiro!', life: 3000 });
         return;
     }
+    loading.value = true;
     await fetchStudents();
+    loading.value = false;
+    
     enrollment.value = { classroom: selectedClassroom.value };
     enrollmentDialog.value = true;
 };
@@ -131,7 +139,7 @@ const confirmDelete = (item) => {
     deleteDialog.value = true;
 };
 
-// --- SALVAR (Com Tratamento de Erro Inteligente) ---
+// --- SALVAR ---
 const saveEnrollment = async () => {
     if (enrollment.value.student && enrollment.value.classroom) {
         try {
@@ -139,21 +147,16 @@ const saveEnrollment = async () => {
             
             toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aluno matriculado!', life: 3000 });
             enrollmentDialog.value = false;
-            fetchEnrollments(); // Atualiza a lista
+            fetchEnrollments(); 
             
         } catch (error) {
-            // AQUI ESTÁ A MELHORIA DO TOAST
-            // O backend retorna arrays de erro. Pegamos a mensagem específica do serializer.
             let msg = 'Erro ao processar requisição.';
-            
             if (error.response && error.response.data) {
-                // Se o erro vier do validator (ex: "Aluno já matriculado...") ele vem em um array 'non_field_errors' ou direto
                 const data = error.response.data;
                 if (Array.isArray(data)) msg = data[0];
                 else if (data.non_field_errors) msg = data.non_field_errors[0];
                 else if (data.detail) msg = data.detail;
             }
-            
             toast.add({ severity: 'error', summary: 'Conflito de Matrícula', detail: msg, life: 5000 });
         }
     }
@@ -173,8 +176,6 @@ const deleteEnrollment = async () => {
 // Gera o PDF
 const generatePDF = () => {
     let url = `reports/student_card/${studentToPrint.value}/`;
-    
-    // Se escolheu um período específico, adiciona na URL
     if (selectedPrintPeriod.value) {
         url += `?period=${selectedPrintPeriod.value}`;
     }
@@ -188,7 +189,7 @@ const generatePDF = () => {
             fileLink.setAttribute('target', '_blank');
             document.body.appendChild(fileLink);
             fileLink.click();
-            printDialog.value = false; // Fecha modal
+            printDialog.value = false; 
         })
         .catch(() => toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao gerar PDF' }))
         .finally(() => loading.value = false);
@@ -230,7 +231,8 @@ onMounted(() => {
                 </div>
 
                 <div class="col-12 md:col-4">
-                    <label class="block font-bold mb-2">&nbsp;</label> <Button 
+                    <label class="block font-bold mb-2">&nbsp;</label> 
+                    <Button 
                         label="Nova Matrícula" 
                         icon="pi pi-plus" 
                         class="p-button-primary w-full" 
@@ -296,6 +298,7 @@ onMounted(() => {
                         placeholder="Busque o aluno pelo nome..." 
                         filter 
                         class="w-full"
+                        fluid
                     />
                 </div>
                 <template #footer>
@@ -306,12 +309,12 @@ onMounted(() => {
 
             <Dialog v-model:visible="deleteDialog" header="Remover Matrícula" :modal="true" :style="{ width: '450px' }">
                 <div class="flex align-items-center justify-center">
-                    <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
+                    <i class="pi pi-exclamation-triangle mr-3 text-yellow-500" style="font-size: 2rem" />
                     <span>Tem certeza que deseja remover este aluno desta turma?</span>
                 </div>
                 <template #footer>
                     <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteDialog = false" />
-                    <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteEnrollment" />
+                    <Button label="Sim" icon="pi pi-check" class="p-button-text p-button-danger" @click="deleteEnrollment" />
                 </template>
             </Dialog>
 
@@ -325,6 +328,7 @@ onMounted(() => {
                         optionValue="id" 
                         placeholder="Selecione..." 
                         class="w-full"
+                        fluid
                     />
                 </div>
                 <template #footer>
