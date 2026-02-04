@@ -16,6 +16,8 @@ const guardianDialog = ref(false);
 const deleteGuardianDialog = ref(false);
 const loading = ref(true);
 const submitted = ref(false);
+const totalRecords = ref(0);
+const lazyParams = ref({ page: 0, rows: 10 });
 
 const filters = ref({
     global: { value: null, matchMode: FilterMatchMode.CONTAINS },
@@ -25,13 +27,27 @@ const filters = ref({
 const loadData = async () => {
     loading.value = true;
     try {
-        const response = await api.get('guardians/?page_size=100');
+        // Pega a página atual do PrimeVue (0, 1, 2) e soma 1 pro Django (1, 2, 3)
+        const page = lazyParams.value.page + 1;
+        const limit = lazyParams.value.rows;
+
+        // Monta a URL dinâmica
+        const response = await api.get(`guardians/?page=${page}&page_size=${limit}`);
+        
         guardians.value = response.data.results;
+        
+        // OBRIGATÓRIO: Avisar o PrimeVue quantos registros existem no total do banco
+        totalRecords.value = response.data.count; 
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar responsáveis' });
     } finally {
         loading.value = false;
     }
+};
+
+const onPage = (event) => {
+    lazyParams.value = event;
+    loadData();
 };
 
 // --- AÇÕES ---
@@ -136,7 +152,7 @@ onMounted(() => {
                 </template>
             </Toolbar>
 
-            <DataTable :value="guardians" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10">
+            <DataTable :value="guardians" :lazy="true" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10" :totalRecords="totalRecords" @page="onPage">
                 <template #header>
                     <div class="flex flex-wrap gap-2 items-center justify-between">
                         <h4 class="m-0">Cadastro de Pais e Responsáveis</h4>
