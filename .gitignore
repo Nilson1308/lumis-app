@@ -2,6 +2,11 @@
 .DS_Store
 .vscode/
 .idea/
+*.log
+
+# --- SENSIBILIDADE E CONFIGURAÇÃO (Raiz) ---
+.env
+docker-compose.prod.yml
 
 # --- PYTHON / DJANGO ---
 backend/venv/

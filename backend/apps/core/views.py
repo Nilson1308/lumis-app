@@ -5,6 +5,7 @@ from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
 from django.utils.html import strip_tags
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
@@ -140,17 +141,22 @@ class PasswordResetConfirmView(APIView):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('first_name')
     serializer_class = UserSerializer
-    # Adicione a paginação 'Gigante' aqui também para garantir que venham todos
     pagination_class = LargeResultsSetPagination 
 
     def get_queryset(self):
         queryset = super().get_queryset()
         
-        # Filtro por Nome do Grupo (ex: ?group=Professores)
+        # Filtro Genérico por Grupo (ex: ?group=Secretaria)
         group_name = self.request.query_params.get('group')
         if group_name:
-            queryset = queryset.filter(groups__name=group_name)
-            
+            queryset = queryset.filter(groups__name__icontains=group_name)
+        
+        # Filtro de Papel Específico (usado no dropdown)
+        role = self.request.query_params.get('role')
+        if role == 'teacher':
+             # CORREÇÃO: Removemos o "OR is_staff". Agora é SÓ quem tem "Professor" no grupo.
+             queryset = queryset.filter(groups__name__icontains='Professor')
+
         return queryset
 
     # Endpoint 'me' para retornar o usuário logado

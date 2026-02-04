@@ -22,26 +22,22 @@ const loadData = async () => {
         const resAssign = await api.get('assignments/?page_size=1000');
         assignments.value = resAssign.data.results;
 
-        // Carrega Dependências (Turmas, Matérias, Professores)
-        // Dica: Para professores, idealmente teriamos um endpoint /api/users/?group=Professores
-        // Por enquanto, vamos carregar todos users e filtrar no front ou backend se tiver endpoint especifico
-        // Se não tiver endpoint de users, use o endpoint que tiver. Vou assumir '/users/'
         const [resClass, resSubj, resUsers] = await Promise.all([
             api.get('classrooms/?page_size=1000'),
             api.get('subjects/?page_size=1000'),
-            api.get('users/?group=Professores&page_size=1000')
+            api.get('users/?role=teacher&page_size=1000') 
         ]);
 
         classrooms.value = resClass.data.results;
         subjects.value = resSubj.data.results;
         
-        // Filtra visualmente quem é professor (se a API trouxer groups, melhor ainda)
-        // Aqui assumo que o endpoint users traz tudo. 
-        // Se sua API de users for diferente, me avise.
-        teachers.value = resUsers.data.results.filter(u => 
-            u.groups && u.groups.some(g => g.name === 'Professores') || 
-            u.is_staff // Fallback
-        );
+        teachers.value = resUsers.data.results.map(u => ({
+            ...u,
+            // Cria um campo 'full_name' garantido
+            full_name: (u.first_name || u.last_name) 
+                ? `${u.first_name} ${u.last_name}` 
+                : u.username
+        }));
 
     } catch (e) {
         console.error(e);
@@ -153,7 +149,15 @@ onMounted(() => {
 
             <div class="mb-2">
                 <label class="block font-bold mb-1">Professor</label>
-                <Dropdown v-model="assignment.teacher" :options="teachers" :optionLabel="getUserName" optionValue="id" placeholder="Selecione o Professor" filter fluid />
+                <Dropdown 
+                    v-model="assignment.teacher" 
+                    :options="teachers" 
+                    optionLabel="full_name" 
+                    optionValue="id" 
+                    placeholder="Selecione o Professor" 
+                    filter
+                    fluid
+                />
                 <small class="p-invalid" v-if="submitted && !assignment.teacher">Professor é obrigatório.</small>
             </div>
 
