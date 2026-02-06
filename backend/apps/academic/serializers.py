@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     Segment, ClassRoom, Subject, Guardian, Student, Enrollment,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent
+    TaughtContent, SchoolEvent, ClassSchedule
 )
 User = get_user_model()
 
@@ -260,3 +260,26 @@ class SchoolEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = SchoolEvent
         fields = '__all__'
+
+class ClassScheduleSerializer(serializers.ModelSerializer):
+    # Campos de Leitura (Para mostrar no calendário)
+    subject_name = serializers.CharField(source='assignment.subject.name', read_only=True)
+    teacher_name = serializers.CharField(source='assignment.teacher.get_full_name', read_only=True)
+    color = serializers.CharField(source='assignment.subject.color', read_only=True, default='#3788d8') # Futuro: cor da matéria
+
+    class Meta:
+        model = ClassSchedule
+        fields = '__all__'
+
+    def validate(self, data):
+        """
+        Validação de Segurança:
+        Garante que a Atribuição (Assignment) selecionada pertence 
+        realmente à Turma (Classroom) que está sendo agendada.
+        """
+        if 'assignment' in data and 'classroom' in data:
+            if data['assignment'].classroom != data['classroom']:
+                raise serializers.ValidationError(
+                    "Esta atribuição (Matéria/Professor) não pertence a esta turma."
+                )
+        return data

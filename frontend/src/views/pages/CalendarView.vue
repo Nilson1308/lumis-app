@@ -57,7 +57,7 @@ const isEditable = computed(() => {
 // --- FULLCALENDAR OPTIONS ---
 const calendarOptions = ref({
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin],
-    initialView: 'dayGridMonth',
+    initialView: 'timeGridWeek',
     locale: ptBrLocale,
     headerToolbar: {
         left: 'prev,next today',

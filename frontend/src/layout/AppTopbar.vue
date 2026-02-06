@@ -138,7 +138,7 @@ onBeforeUnmount(() => clearInterval(interval));
                     <i :class="['pi', { 'pi-moon': isDarkTheme, 'pi-sun': !isDarkTheme }]"></i>
                 </button>
 
-                <button type="button" class="layout-topbar-action mr-3 relative overflow-visible" @click="toggleNotificacoes">
+                <button type="button" class="layout-topbar-action relative overflow-visible" @click="toggleNotificacoes">
 
                     <OverlayBadge v-if="unreadCount > 0" :value="unreadCount" severity="danger">
                         <i class="pi pi-bell" />

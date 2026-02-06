@@ -33,6 +33,10 @@ class MeetingMinuteSerializer(serializers.ModelSerializer):
 class StudentReportSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True)
     teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
+    
+    # Campos para exibição (Read Only)
+    type_display = serializers.CharField(source='get_report_type_display', read_only=True)
+    level_display = serializers.CharField(source='get_severity_level_display', read_only=True)
 
     class Meta:
         model = StudentReport

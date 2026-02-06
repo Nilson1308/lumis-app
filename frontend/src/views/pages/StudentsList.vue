@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { FilterMatchMode } from '@primevue/core/api'; 
+import PhotoCropperDialog from '@/components/PhotoCropperDialog.vue';
 import api from '@/service/api';
 
 const toast = useToast();
@@ -13,6 +14,9 @@ const studentDialog = ref(false);
 const deleteStudentDialog = ref(false);
 const loading = ref(true);
 const submitted = ref(false);
+const showCropper = ref(false);
+const tempImageSrc = ref(null);
+const photoFile = ref(null);
 
 // --- VARIÁVEIS PARA PAGINAÇÃO SERVER-SIDE ---
 const totalRecords = ref(0);
@@ -121,6 +125,26 @@ const openNew = () => {
     studentDialog.value = true;
 };
 
+const onFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+        // Cria uma URL local para mostrar no Cropper
+        tempImageSrc.value = URL.createObjectURL(file);
+        showCropper.value = true;
+        // Reseta o input para permitir selecionar a mesma foto se errar
+        event.target.value = ''; 
+    }
+};
+
+const onCropSave = (blob) => {
+    // Guardamos o blob para enviar ao backend depois
+    photoFile.value = blob;
+
+    // (Opcional) Mostra preview na tela
+    const previewUrl = URL.createObjectURL(blob);
+    student.value.photo_preview = previewUrl; 
+};
+
 const editStudent = (prod) => {
     student.value = { ...prod };
     
@@ -151,16 +175,15 @@ const confirmDeleteStudent = (prod) => {
     deleteStudentDialog.value = true;
 };
 
-const onFileSelect = (event, field) => {
-    student.value[field] = event.files[0];
-};
-
 const saveStudent = async () => {
     submitted.value = true;
+
+    // Verifica campos obrigatórios
     if (student.value.name && student.value.registration_number) {
         
         const formData = new FormData();
         
+        // 1. Campos Simples
         const simpleFields = [
             'name', 'registration_number', 'birth_date', 'gender', 'cpf', 'rg', 'nationality',
             'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
@@ -170,17 +193,22 @@ const saveStudent = async () => {
 
         simpleFields.forEach(field => {
             let val = student.value[field];
+            
+            // Tratamento de Data
             if (field === 'birth_date' && val instanceof Date) {
                 val = val.toISOString().split('T')[0];
             }
+            // Tratamento de Booleano
             if (field === 'is_full_time') {
                 val = val ? 'true' : 'false';
             }
+            // Apenas adiciona se tiver valor
             if (val !== undefined && val !== null) {
                 formData.append(field, val);
             }
         });
 
+        // 2. Relacionamentos (Arrays)
         if (student.value.guardians) {
             student.value.guardians.forEach(id => formData.append('guardians', id));
         }
@@ -188,6 +216,7 @@ const saveStudent = async () => {
             student.value.extra_activities.forEach(id => formData.append('extra_activities', id));
         }
 
+        // 3. Arquivos Documentais (Laudos/Receitas)
         if (student.value.medical_report instanceof File) {
             formData.append('medical_report', student.value.medical_report);
         }
@@ -195,22 +224,32 @@ const saveStudent = async () => {
             formData.append('prescription', student.value.prescription);
         }
 
+        // 4. NOVA LÓGICA DA FOTO (Aqui está a mágica)
+        // Se photoFile (ref criado no setup) tiver valor, anexa como arquivo
+        if (photoFile.value) {
+            formData.append('photo', photoFile.value, 'photo.jpg');
+        }
+
         try {
             const config = { headers: { 'Content-Type': 'multipart/form-data' } };
             
             if (student.value.id) {
                 await api.patch(`students/${student.value.id}/`, formData, config);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado!', life: 3000 });
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado com sucesso!', life: 3000 });
             } else {
                 await api.post('students/', formData, config);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado!', life: 3000 });
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado com sucesso!', life: 3000 });
             }
+            
             studentDialog.value = false;
+            photoFile.value = null; // Limpa a foto temporária da memória
             loadData();
         } catch (error) {
             console.error(error);
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.', life: 3000 });
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar. Verifique os dados.', life: 3000 });
         }
+    } else {
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Nome e Matrícula.', life: 3000 });
     }
 };
 
@@ -318,21 +357,58 @@ onMounted(() => {
                     
                     <TabPanels>
                         <TabPanel value="0">
-                            <div class="mb-2">
-                                <label for="name" class="block font-bold mb-3">Nome Completo</label>
-                                <InputText id="name" v-model.trim="student.name" required="true" autofocus :class="{ 'p-invalid': submitted && !student.name }" fluid />
-                                <small class="p-error" v-if="submitted && !student.name">O nome é obrigatório.</small>
+                            <div class="grid grid-cols-12 gap-4 mb-2">
+                                <div class="col-span-12 xl:col-span-3">
+                                    <div class="flex flex-col items-center mb-4">
+                                        <div class="relative">
+                                            <Avatar 
+                                                :image="student.photo_preview || student.photo || '/public/default-avatar.png'" 
+                                                size="xlarge" 
+                                                shape="circle"
+                                                style="object-fit: cover"
+                                            />
+
+                                            <div class="absolute bottom-0 right-0">
+                                                <Button icon="pi pi-camera" class="p-button-rounded" @click="$refs.fileInput.click()" size="small" />
+                                            </div>
+                                        </div>
+
+                                        <input 
+                                            type="file" 
+                                            ref="fileInput" 
+                                            accept="image/*" 
+                                            style="display: none" 
+                                            @change="onFileSelect" 
+                                        />
+                                        <span class="text-sm text-center">Clique na câmera para alterar</span>
+                                    </div>
+                                </div>
+                                <div class="col-span-12 xl:col-span-9">
+                                    <label for="name" class="block font-bold mb-3">Nome Completo</label>
+                                    <InputText id="name" v-model.trim="student.name" required="true" autofocus :class="{ 'p-invalid': submitted && !student.name }" fluid />
+                                    <small class="p-error" v-if="submitted && !student.name">O nome é obrigatório.</small>
+                                    <div class="grid grid-cols-12 gap-4 mb-2 mt-2">
+                                        <div class="col-span-12 xl:col-span-6">
+                                            <label class="block font-bold mb-3">Matrícula</label>
+                                            <InputText v-model.trim="student.registration_number" required="true" :class="{ 'p-invalid': submitted && !student.registration_number }" fluid />
+                                        </div>
+                                        <div class="col-span-12 xl:col-span-6">
+                                            <label class="block font-bold mb-3">Data de Nascimento</label>
+                                            <DatePicker v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
+                            <PhotoCropperDialog 
+                                v-model:visible="showCropper" 
+                                :imageSrc="tempImageSrc" 
+                                @save="onCropSave" 
+                            />
+
+                            <Divider />
+
                             <div class="grid grid-cols-12 gap-4 mb-2">
-                                <div class="col-span-12 xl:col-span-6">
-                                    <label class="block font-bold mb-3">Matrícula</label>
-                                    <InputText v-model.trim="student.registration_number" required="true" :class="{ 'p-invalid': submitted && !student.registration_number }" fluid />
-                                </div>
-                                <div class="col-span-12 xl:col-span-6">
-                                    <label class="block font-bold mb-3">Data de Nascimento</label>
-                                    <DatePicker v-model="student.birth_date" dateFormat="dd/mm/yy" :showIcon="true" fluid />
-                                </div>
                                 <div class="col-span-12 xl:col-span-4">
                                     <label class="block font-bold mb-3">Gênero</label>
                                     <Dropdown v-model="student.gender" :options="[{label:'Masculino', value:'M'}, {label:'Feminino', value:'F'}]" optionLabel="label" optionValue="value" placeholder="Selecione" fluid />
@@ -530,3 +606,10 @@ onMounted(() => {
         </div>
     </div>
 </template>
+
+<style scoped>
+.p-avatar-xl{
+    width: 8rem !important;
+    height: 8rem !important;
+}
+</style>

@@ -3,7 +3,6 @@ import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
-// Definição manual para evitar erro de import do Vite
 const FilterMatchMode = {
     CONTAINS: 'contains'
 };
@@ -27,22 +26,36 @@ const filters = ref({
 const loadData = async () => {
     loading.value = true;
     try {
-        // Pega a página atual do PrimeVue (0, 1, 2) e soma 1 pro Django (1, 2, 3)
         const page = lazyParams.value.page + 1;
         const limit = lazyParams.value.rows;
+        
+        // --- CORREÇÃO AQUI ---
+        // Pega o valor digitado na busca global
+        const searchTerm = filters.value.global.value;
+        
+        // Monta a URL com o parâmetro de busca se existir
+        let url = `guardians/?page=${page}&page_size=${limit}`;
+        if (searchTerm) {
+            url += `&search=${encodeURIComponent(searchTerm)}`;
+        }
 
-        // Monta a URL dinâmica
-        const response = await api.get(`guardians/?page=${page}&page_size=${limit}`);
+        const response = await api.get(url);
         
         guardians.value = response.data.results;
-        
-        // OBRIGATÓRIO: Avisar o PrimeVue quantos registros existem no total do banco
         totalRecords.value = response.data.count; 
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar responsáveis' });
     } finally {
         loading.value = false;
     }
+};
+
+const onFilter = (event) => {
+    // Atualiza os filtros com o que veio do evento
+    filters.value = event.filters;
+    // Reseta para a primeira página quando filtra
+    lazyParams.value.page = 0; 
+    loadData();
 };
 
 const onPage = (event) => {
@@ -152,7 +165,17 @@ onMounted(() => {
                 </template>
             </Toolbar>
 
-            <DataTable :value="guardians" :lazy="true" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10" :totalRecords="totalRecords" @page="onPage">
+            <DataTable 
+                :value="guardians" 
+                :lazy="true" 
+                :filters="filters" 
+                :loading="loading" 
+                responsiveLayout="scroll" 
+                :paginator="true" 
+                :rows="10" 
+                :totalRecords="totalRecords" 
+                @page="onPage"
+                @filter="onFilter"  >
                 <template #header>
                     <div class="flex flex-wrap gap-2 items-center justify-between">
                         <h4 class="m-0">Cadastro de Pais e Responsáveis</h4>
@@ -160,7 +183,7 @@ onMounted(() => {
                             <InputIcon>
                                 <i class="pi pi-search" />
                             </InputIcon>
-                            <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="onSearch" />
+                            <InputText v-model="filters['global'].value" placeholder="Buscar..." @input="loadData" />
                         </IconField>
                     </div>
                 </template>

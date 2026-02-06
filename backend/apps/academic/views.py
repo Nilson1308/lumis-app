@@ -15,7 +15,7 @@ User = get_user_model()
 from .models import (
     Segment, ClassRoom, Guardian, Student, Enrollment, Subject,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent
+    TaughtContent, SchoolEvent, ClassSchedule
 )
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
@@ -23,9 +23,10 @@ from .serializers import (
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
     GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
-    ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer
+    ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer, ClassScheduleSerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
+from apps.coordination.models import StudentReport
 
 class FlexiblePagination(PageNumberPagination):
     page_size = 10
@@ -40,16 +41,91 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
     queryset = ClassRoom.objects.all()
     serializer_class = ClassRoomSerializer
     pagination_class = LargeResultsSetPagination
+    parser_classes = (MultiPartParser, FormParser)
 
     search_fields = ['name', 'year']
     ordering_fields = ['year', 'name']
+
+    @action(detail=True, methods=['get'])
+    def dashboard(self, request, pk=None):
+        classroom = self.get_object()
+        
+        # 1. Alunos e Ocorrências
+        enrollments = Enrollment.objects.filter(
+            classroom=classroom, active=True
+        ).select_related('student')
+        
+        student_ids = [e.student.id for e in enrollments]
+        
+        # Conta Ocorrências da Turma (Total)
+        occurrences_count = StudentReport.objects.filter(
+            student__id__in=student_ids,
+            report_type='DISCIPLINARY' 
+        ).exclude(status='REJECTED').count()
+
+        # 2. Cálculo de Presença (Média da Turma)
+        # Pega todas as chamadas feitas para alunos dessa sala
+        all_attendance = Attendance.objects.filter(
+            enrollment__classroom=classroom
+        )
+        total_calls = all_attendance.count()
+        total_presents = all_attendance.filter(present=True).count()
+        
+        # Evita divisão por zero
+        average_attendance = 0
+        if total_calls > 0:
+            average_attendance = int((total_presents / total_calls) * 100)
+
+        # 3. Montar Lista de Alunos
+        students_data = []
+        for enroll in enrollments:
+            students_data.append({
+                'id': enroll.student.id,
+                'name': enroll.student.name,
+                'status': 'Ativo' if enroll.active else 'Inativo',
+                'photo': request.build_absolute_uri(enroll.student.photo.url) if enroll.student.photo else None,
+            })
+
+        # 4. Corpo Docente (Mantém igual)
+        assignments = TeacherAssignment.objects.filter(
+            classroom=classroom
+        ).select_related('teacher', 'subject').order_by('subject__name')
+        
+        teachers_data = []
+        for assign in assignments:
+            teachers_data.append({
+                'id': assign.id,
+                'subject': assign.subject.name,
+                'teacher': assign.teacher.get_full_name() or assign.teacher.username,
+                'teacher_email': assign.teacher.email
+            })
+
+        stats = {
+            'total_students': enrollments.count(),
+            'total_subjects': assignments.count(),
+            'average_attendance': average_attendance, # Valor Real agora!
+            'occurrences': occurrences_count
+        }
+
+        return Response({
+            'classroom': {
+                'id': classroom.id,
+                'name': classroom.name,
+                'year': classroom.year,
+                'segment': classroom.segment.name if classroom.segment else 'N/A',
+            },
+            'stats': stats,
+            'students': students_data,
+            'faculty': teachers_data
+        })
 
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.all().order_by('name')
     serializer_class = GuardianSerializer
     pagination_class = FlexiblePagination
     permission_classes = [permissions.IsAuthenticated, IsGuardianOwner]
-    search_fields = ['name', 'cpf', 'email']
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'cpf', 'email', 'phone']
 
     def get_serializer_class(self):
         user = self.request.user
@@ -79,6 +155,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().order_by('name')
     serializer_class = StudentSerializer
     pagination_class = FlexiblePagination
+    parser_classes = (MultiPartParser, FormParser)
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     search_fields = ['name', 'registration_number', 'cpf']
     filterset_fields = ['period', 'is_full_time']
@@ -645,3 +722,12 @@ class SchoolEventViewSet(viewsets.ModelViewSet):
             return event.created_by == user
             
         return False
+
+class ClassScheduleViewSet(viewsets.ModelViewSet):
+    queryset = ClassSchedule.objects.all().order_by('day_of_week', 'start_time')
+    serializer_class = ClassScheduleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    # Permite filtrar por turma: /api/schedules/?classroom=1
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend]
+    filterset_fields = ['classroom', 'day_of_week']

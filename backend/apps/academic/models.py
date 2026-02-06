@@ -365,3 +365,32 @@ class SchoolEvent(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()}: {self.title} ({self.start_time.strftime('%d/%m')})"
+
+class ClassSchedule(models.Model):
+    # Padrão FullCalendar: 0=Dom, 1=Seg, ..., 6=Sab
+    DAYS_OF_WEEK = [
+        (1, 'Segunda-feira'),
+        (2, 'Terça-feira'),
+        (3, 'Quarta-feira'),
+        (4, 'Quinta-feira'),
+        (5, 'Sexta-feira'),
+        (6, 'Sábado'),
+        (0, 'Domingo'),
+    ]
+
+    classroom = models.ForeignKey(ClassRoom, on_delete=models.CASCADE, related_name='schedules')
+    assignment = models.ForeignKey(TeacherAssignment, on_delete=models.CASCADE)
+    
+    day_of_week = models.IntegerField("Dia da Semana", choices=DAYS_OF_WEEK)
+    start_time = models.TimeField("Início")
+    end_time = models.TimeField("Fim")
+
+    class Meta:
+        verbose_name = "Grade Horária"
+        verbose_name_plural = "Grades Horárias"
+        ordering = ['day_of_week', 'start_time']
+        # Evita duplicidade simples (mesma turma, mesmo dia, mesmo horário de início)
+        unique_together = ['classroom', 'day_of_week', 'start_time']
+
+    def __str__(self):
+        return f"{self.get_day_of_week_display()} - {self.start_time} - {self.assignment.subject.name}"

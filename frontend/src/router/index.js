@@ -67,7 +67,7 @@ const router = createRouter({
                     component: () => import('@/views/pages/StudentsList.vue')
                 },
                 {
-                    path: '/academic/guardians',
+                    path: '/guardians',
                     name: 'guardians-list',
                     component: () => import('@/views/pages/GuardianList.vue')
                 },
@@ -75,6 +75,12 @@ const router = createRouter({
                     path: '/classrooms',
                     name: 'classrooms',
                     component: () => import('@/views/pages/ClassRoomsList.vue')
+                },
+                {
+                    path: '/classrooms/:id',
+                    name: 'classroom-detail',
+                    component: () => import('@/views/pages/ClassroomDetail.vue'),
+                    meta: { breadcrumb: 'Detalhes da Turma' }
                 },
                 {
                     path: '/subjects',
@@ -126,12 +132,12 @@ const router = createRouter({
                     props: true
                 },
                 {
-                    path: '/professor/observacoes',
+                    path: '/teacher/observacoes',
                     name: 'teacher-observations',
                     component: () => import('@/views/pages/teacher/TeacherObservations.vue')
                 },
                 {
-                    path: '/professor/relatorios',
+                    path: '/teacher/relatorios',
                     name: 'student-report',
                     component: () => import('@/views/pages/teacher/StudentReportList.vue')
                 },                
@@ -158,12 +164,12 @@ const router = createRouter({
                     component: () => import('@/views/pages/coordination/WeeklyReportList.vue')
                 },
                 {
-                    path: '/coordenacao/justificativas',
+                    path: '/coordination/justificativas',
                     name: 'justification-review',
                     component: () => import('@/views/pages/coordination/JustificationReview.vue')
                 },
                 {
-                    path: '/coordenacao/relatorios',
+                    path: '/coordination/relatorios',
                     name: 'student-report-approval',
                     component: () => import('@/views/pages/coordination/StudentReportApproval.vue')
                 },

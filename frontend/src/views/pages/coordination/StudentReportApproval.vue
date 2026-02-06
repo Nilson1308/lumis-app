@@ -104,7 +104,7 @@ onMounted(() => {
             
             <template #footer>
                 <Button label="Solicitar Ajuste" icon="pi pi-times" class="p-button-danger p-button-text" @click="updateStatus('REJECTED')" />
-                <Button label="Aprovar e Publicar" icon="pi pi-check" class="p-button-success" @click="updateStatus('APPROVED')" />
+                <Button label="Aprovar e Publicar" icon="pi pi-check" class="p-button" @click="updateStatus('APPROVED')" />
             </template>
         </Dialog>
     </div>

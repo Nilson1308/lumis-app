@@ -227,8 +227,8 @@ const getStatusLabel = (status) => {
             </div>
             <template #footer>
                 <div class="flex justify-between w-full">
-                    <Button label="Solicitar Correção" icon="pi pi-times" severity="warning" @click="saveFeedback('RETURNED')" />
-                    <Button label="Aprovar" icon="pi pi-check" severity="success" @click="saveFeedback('APPROVED')" />
+                    <Button label="Solicitar Correção" icon="pi pi-times" class="p-button-danger p-button-text" @click="saveFeedback('RETURNED')" />
+                    <Button label="Aprovar" icon="pi pi-check" class="p-button" @click="saveFeedback('APPROVED')" />
                 </div>
             </template>
         </Dialog>

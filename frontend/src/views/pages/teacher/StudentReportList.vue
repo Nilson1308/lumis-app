@@ -14,6 +14,19 @@ const submitted = ref(false);
 // Variável temporária para armazenar o objeto selecionado no Dropdown
 const selectedStudentContext = ref(null);
 
+const reportTypes = ref([
+    { label: 'Pedagógico / Acompanhamento', value: 'PEDAGOGICAL' },
+    { label: 'Disciplinar / Ocorrência', value: 'DISCIPLINARY' },
+    { label: 'Elogio / Mérito', value: 'PRAISE' },
+    { label: 'Saúde / Enfermaria', value: 'MEDICAL' }
+]);
+
+const reportLevels = ref([
+    { label: 'Baixo (Informativo)', value: 'LOW' },
+    { label: 'Médio (Atenção)', value: 'MEDIUM' },
+    { label: 'Crítico (Urgente)', value: 'CRITICAL' }
+]);
+
 // --- CARREGAR DADOS ---
 const loadData = async () => {
     loading.value = true;
@@ -35,8 +48,13 @@ const loadData = async () => {
 
 // --- AÇÕES ---
 const openNew = () => {
-    report.value = { date: new Date(), content: '' };
-    selectedStudentContext.value = null; // Limpa seleção visual
+    report.value = { 
+        date: new Date(), 
+        content: '',
+        report_type: 'PEDAGOGICAL', // Padrão
+        severity_level: 'LOW'       // Padrão
+    };
+    selectedStudentContext.value = null;
     submitted.value = false;
     reportDialog.value = true;
 };
@@ -123,7 +141,7 @@ const getStatusSeverity = (status) => {
         <Toast />
         <Toolbar class="mb-4">
             <template #start>
-                <Button label="Novo Relatório Individual" icon="pi pi-plus" class="p-button-success" @click="openNew" />
+                <Button label="Novo Relatório Individual" icon="pi pi-plus" class="p-button" @click="openNew" />
             </template>
         </Toolbar>
 
@@ -136,6 +154,15 @@ const getStatusSeverity = (status) => {
             </Column>
             <Column field="student_name" header="Aluno"></Column>
             <Column field="subject" header="Assunto"></Column>
+            <Column field="type_display" header="Tipo" sortable>
+                <template #body="slotProps">
+                    <i v-if="slotProps.data.report_type === 'DISCIPLINARY'" class="pi pi-exclamation-triangle text-orange-500 mr-2"></i>
+                    <i v-if="slotProps.data.report_type === 'PRAISE'" class="pi pi-star-fill text-yellow-500 mr-2"></i>
+                    <i v-if="slotProps.data.report_type === 'MEDICAL'" class="pi pi-heart text-red-500 mr-2"></i>
+                    
+                    {{ slotProps.data.type_display }}
+                </template>
+            </Column>
             <Column field="status" header="Status" style="min-width: 180px">
                 <template #body="slotProps">
                     <div class="flex items-center gap-2">
@@ -193,6 +220,41 @@ const getStatusSeverity = (status) => {
                     <label class="block font-bold mb-2">Assunto / Matéria</label>
                     <InputText v-model="report.subject" placeholder="Ex: Matemática - Dificuldade em Frações" fluid />
                     <small class="text-gray-500">Preenchido automaticamente ao selecionar o aluno.</small>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-4 mb-2">
+                <div class="col-span-12 xl:col-span-6">
+                    <label class="block font-bold mb-2">Tipo de Relatório</label>
+                    <Dropdown 
+                        v-model="report.report_type" 
+                        :options="reportTypes" 
+                        optionLabel="label" 
+                        optionValue="value" 
+                        placeholder="Selecione o tipo" 
+                        class="w-full"
+                    />
+                </div>
+                
+                <div class="col-span-12 xl:col-span-6">
+                    <label class="block font-bold mb-2">Nível de Gravidade</label>
+                    <Dropdown 
+                        v-model="report.severity_level" 
+                        :options="reportLevels" 
+                        optionLabel="label" 
+                        optionValue="value" 
+                        class="w-full"
+                    >
+                        <template #value="slotProps">
+                            <Tag 
+                                :value="slotProps.value ? reportLevels.find(l => l.value === slotProps.value)?.label : 'Selecione'" 
+                                :severity="slotProps.value === 'CRITICAL' ? 'danger' : (slotProps.value === 'MEDIUM' ? 'warning' : 'info')" 
+                            />
+                        </template>
+                    </Dropdown>
+                    <small class="text-gray-500 block mt-1" v-if="report.severity_level === 'CRITICAL'">
+                        <i class="pi pi-info-circle"></i> Atenção: Nível Crítico pode gerar notificação imediata.
+                    </small>
                 </div>
             </div>
 

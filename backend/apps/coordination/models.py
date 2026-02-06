@@ -58,15 +58,34 @@ class MeetingMinute(models.Model):
         return f"Ata: {self.title} ({self.date})"
 
 class StudentReport(models.Model):
+    # --- STATUS EXISTENTE (Fluxo de Aprovação) ---
     STATUS_CHOICES = [
         ('PENDING', 'Pendente de Aprovação'),
         ('APPROVED', 'Aprovado'),
         ('REJECTED', 'Precisa de Ajustes')
     ]
 
-    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='reports')
+    # --- NOVOS CAMPOS (Tipificação) ---
+    TYPE_CHOICES = [
+        ('PEDAGOGICAL', 'Pedagógico/Acompanhamento'), # Padrão (Relatórios longos)
+        ('DISCIPLINARY', 'Disciplinar/Ocorrência'),   # Ocorrências negativas
+        ('PRAISE', 'Elogio/Mérito'),                  # Ocorrências positivas
+        ('MEDICAL', 'Saúde/Enfermaria'),              # Ocorrências de saúde
+    ]
+
+    LEVEL_CHOICES = [
+        ('LOW', 'Baixo/Informativo'),      # Apenas registro
+        ('MEDIUM', 'Médio/Atenção'),       # Requer observação
+        ('CRITICAL', 'Crítico/Urgente'),   # Requer convocação dos pais
+    ]
+
+    student = models.ForeignKey('academic.Student', on_delete=models.CASCADE, related_name='reports')
     teacher = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     
+    # Adicionamos os novos campos com defaults para não quebrar dados antigos
+    report_type = models.CharField("Tipo", max_length=20, choices=TYPE_CHOICES, default='PEDAGOGICAL')
+    severity_level = models.CharField("Nível de Gravidade", max_length=10, choices=LEVEL_CHOICES, default='LOW')
+
     date = models.DateField(verbose_name="Data do Relatório")
     subject = models.CharField(max_length=200, verbose_name="Assunto")
     content = models.TextField(verbose_name="Conteúdo")
@@ -79,4 +98,4 @@ class StudentReport(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.student.name} - {self.subject} ({self.date})"
+        return f"[{self.get_report_type_display()}] {self.student.name} - {self.subject}"

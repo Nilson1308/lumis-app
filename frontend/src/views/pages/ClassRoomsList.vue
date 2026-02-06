@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
@@ -7,6 +8,7 @@ const toast = useToast();
 const dt = ref();
 
 // --- ESTADOS ---
+const router = useRouter();
 const classRooms = ref([]);
 const segments = ref([]); // Lista para o Dropdown
 const classRoom = ref({});
@@ -24,6 +26,10 @@ const lazyParams = ref({
     filters: {}
 });
 const globalFilter = ref('');
+
+const openClassroom = (classroom) => {
+    router.push(`/classrooms/${classroom.id}`);
+};
 
 // --- API: LISTAR TURMAS ---
 const fetchClassRooms = async () => {
@@ -181,6 +187,7 @@ onMounted(() => {
                 
                 <Column header="Ações" style="width: 15%">
                     <template #body="slotProps">
+                        <Button icon="pi pi-eye" class="p-button-rounded mr-2" @click="openClassroom(slotProps.data)" v-tooltip.top="'Dashboard da Turma'" />
                         <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editClassRoom(slotProps.data)" />
                         <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteClassRoom(slotProps.data)" />
                     </template>
