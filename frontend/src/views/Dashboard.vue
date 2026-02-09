@@ -259,7 +259,7 @@ const updateChartColors = () => {
         <div class="col-span-12" v-if="role === 'coordinator'">
             <div class="card">
                 <div class="font-semibold text-xl mb-4">Lotação das Turmas</div>
-                <Chart type="bar" :data="barClassData" :options="barClassOptions" class="h-20rem" />
+                <Chart type="bar" :data="barClassData" :options="barClassOptions" class="h-[25rem]" />
             </div>
         </div>
 
