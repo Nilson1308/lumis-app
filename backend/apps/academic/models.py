@@ -296,6 +296,15 @@ class LessonPlan(models.Model):
     def __str__(self):
         return f"Semana {self.start_date} - {self.assignment}"
 
+class LessonPlanFile(models.Model):
+    plan = models.ForeignKey(LessonPlan, related_name='attachments', on_delete=models.CASCADE)
+    file = models.FileField(upload_to='lesson_plans/%Y/%m/')
+    name = models.CharField(max_length=255, blank=True) # Nome original do arquivo
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name or self.file.name
+
 class TaughtContent(models.Model):
     """Registro diário do Conteúdo Ministrado"""
     assignment = models.ForeignKey(TeacherAssignment, on_delete=models.CASCADE, verbose_name="Atribuição")

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     Segment, ClassRoom, Subject, Guardian, Student, Enrollment,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory
+    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory, LessonPlan, LessonPlanFile
 )
 User = get_user_model()
 
@@ -164,20 +164,34 @@ class AcademicPeriodSerializer(serializers.ModelSerializer):
         model = AcademicPeriod
         fields = '__all__'
 
+class LessonPlanFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LessonPlanFile
+        fields = ['id', 'file', 'name', 'uploaded_at']
+
 class LessonPlanSerializer(serializers.ModelSerializer):
-    # Campos de leitura para facilitar o frontend
     teacher_name = serializers.CharField(source='assignment.teacher.get_full_name', read_only=True)
     subject_name = serializers.CharField(source='assignment.subject.name', read_only=True)
     classroom_name = serializers.CharField(source='assignment.classroom.name', read_only=True)
+
+    # 1. ATIVAR RECIPIENTS (Permite escrever e ler)
+    recipients = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(), 
+        many=True, 
+        required=False
+    )
+
+    # 2. ATIVAR MÚLTIPLOS ANEXOS (Leitura)
+    attachments = LessonPlanFileSerializer(many=True, read_only=True)
 
     class Meta:
         model = LessonPlan
         fields = [
             'id', 'assignment', 'topic', 'description', 
             'start_date', 'end_date', 'status', 
-            'attachment', 'coordinator_note',
-            'teacher_name', 'subject_name', 'classroom_name',
-            'created_at'
+            'recipients', 'attachments', 'attachment', # Mantemos 'attachment' para ler os antigos se precisar
+            'coordinator_note', 'teacher_name', 'subject_name', 
+            'classroom_name', 'created_at'
         ]
 
 class SimpleUserSerializer(serializers.ModelSerializer):

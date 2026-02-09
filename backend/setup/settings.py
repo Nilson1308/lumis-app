@@ -200,3 +200,10 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='webmaster@localhost')
+
+# Avisa o Django que se o cabeçalho X-Forwarded-Proto for https, a conexão é segura.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Garante que os cookies de sessão/login só trafeguem em HTTPS
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True

@@ -15,7 +15,7 @@ User = get_user_model()
 from .models import (
     Segment, ClassRoom, Guardian, Student, Enrollment, Subject,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory
+    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory, LessonPlan, LessonPlanFile
 )
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
@@ -24,7 +24,7 @@ from .serializers import (
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
     GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
     ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer, ClassScheduleSerializer,
-    AcademicHistorySerializer
+    AcademicHistorySerializer, LessonPlanFileSerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 from apps.coordination.models import StudentReport
@@ -544,32 +544,58 @@ class DashboardDataView(APIView):
 
 class LessonPlanViewSet(viewsets.ModelViewSet):
     serializer_class = LessonPlanSerializer
+    # Importante para aceitar uploads
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
+    
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = [
-        'assignment__teacher',   # Filtrar por Professor
-        'assignment__classroom', # Filtrar por Turma
-        'assignment__subject',   # Filtrar por Matéria
-        'status',                # Filtrar por Status (Enviado, Aprovado...)
-        'start_date'             # Filtrar por Data
+        'assignment__teacher', 'assignment__classroom', 
+        'assignment__subject', 'status', 'start_date'
     ]
-    search_fields = ['topic', 'assignment__teacher__name']
-    
+    search_fields = ['topic', 'assignment__teacher__first_name']
+
     def get_queryset(self):
         user = self.request.user
         queryset = LessonPlan.objects.all().order_by('-start_date')
-        
-        # Se for Superusuário ou Coordenador, vê tudo
-        if user.is_superuser or user.groups.filter(name='Coordenacao').exists():
+
+        # Se for Superusuário, vê tudo
+        if user.is_superuser:
             return queryset
         
-        # Se for Professor, só vê os planos das SUAS atribuições
-        if hasattr(user, 'teacher_profile'): # Supondo que usamos is_teacher flag ou checagem similar
-             # Filtra planos onde a atribuição pertence ao professor logado
-             return queryset.filter(assignment__teacher=user)
+        # Se for do grupo Coordenação, vê:
+        # A) Planos onde ele é explicitamente destinatário (recipients)
+        # B) OU (Opcional) Vê tudo, se for regra da escola.
+        if user.groups.filter(name='Coordenacao').exists():
+            # Exemplo: Vê apenas os direcionados a ele
+            return queryset.filter(recipients=user)
+            
+            # Se quiser ver TUDO:
+            # return queryset
         
-        # Fallback (se não for nada, não vê nada ou vê tudo dependendo da regra)
-        # Por segurança, se não é coord nem super, filtra pelo usuário
+        # Professor vê só os seus
         return queryset.filter(assignment__teacher=user)
+
+    def perform_create(self, serializer):
+        # 1. Salva os dados básicos e Recipients
+        plan = serializer.save()
+        
+        # 2. Processa os Arquivos (attachments) vindo do Frontend
+        self._handle_attachments(plan)
+
+    def perform_update(self, serializer):
+        plan = serializer.save()
+        self._handle_attachments(plan)
+
+    def _handle_attachments(self, plan):
+        # Pega a lista de arquivos enviada com a chave 'attachments'
+        files = self.request.FILES.getlist('attachments')
+        
+        for f in files:
+            LessonPlanFile.objects.create(
+                plan=plan, 
+                file=f,
+                name=f.name # Salva o nome original
+            )
 
 class CoordinatorViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SimpleUserSerializer

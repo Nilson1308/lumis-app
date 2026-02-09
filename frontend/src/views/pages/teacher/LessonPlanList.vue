@@ -12,11 +12,15 @@ const router = useRouter();
 const plans = ref([]);
 const plan = ref({});
 const assignments = ref([]); 
-const coordinators = ref([]); // Lista de coordenadores
+const coordinators = ref([]); 
 const planDialog = ref(false);
 const deleteDialog = ref(false);
 const loading = ref(true);
 const submitted = ref(false);
+
+// Controle de Anexos
+const fileUploadRef = ref(null);
+const newAttachments = ref([]); // Arquivos novos selecionados para upload
 
 const filters = ref({ global: { value: null, matchMode: FilterMatchMode.CONTAINS } });
 
@@ -24,7 +28,6 @@ const filters = ref({ global: { value: null, matchMode: FilterMatchMode.CONTAINS
 const loadData = async () => {
     loading.value = true;
     try {
-        // 1. Carrega Planos
         const resPlans = await api.get('lesson-plans/?page_size=100');
         let allPlans = resPlans.data.results;
 
@@ -35,53 +38,37 @@ const loadData = async () => {
             plans.value = allPlans;
         }
 
-        // 2. Carrega Atribuições
         const resAssign = await api.get('assignments/?page_size=100');
         assignments.value = resAssign.data.results.map(a => ({
             id: a.id,
             label: `${a.subject_name} - ${a.classroom_name}`
         }));
 
-        // 3. NOVO: Carrega Coordenadores
-        try {
-            const resCoords = await api.get('coordinators/'); 
-            const rawList = resCoords.data.results || resCoords.data;
-            coordinators.value = rawList.map(u => ({
-                id: u.id,
-                label: u.full_name || u.first_name || u.username
-            }));
+        const resCoords = await api.get('coordinators/'); 
+        const rawList = resCoords.data.results || resCoords.data;
+        coordinators.value = rawList.map(u => ({
+            id: u.id,
+            label: u.full_name || u.first_name || u.username
+        }));
 
-        } catch (e) {
-            console.error("Erro ao carregar:", e);
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha na conexão' });
-        }
-
+        // Lógica de notificação (abrir modal via URL)
         if (route.query.open === 'true' && route.query.assignment && route.query.date) {
-            console.log("Abrindo modal via notificação...");
-            
-            // Limpa a query da URL para não reabrir ao dar F5 (opcional, mas recomendado)
-            // router.replace({ query: null }); 
+             const targetDate = new Date(route.query.date + 'T00:00:00');
+             const endDate = new Date(targetDate);
+             endDate.setDate(targetDate.getDate() + 4);
 
-            // Prepara o objeto
-            const targetDate = new Date(route.query.date + 'T00:00:00'); // Corrige fuso
-            const targetAssignment = parseInt(route.query.assignment);
-            
-            // Calcula o fim da semana (Sexta) baseado na data da URL
-            const endDate = new Date(targetDate);
-            endDate.setDate(targetDate.getDate() + 4);
-
-            plan.value = {
+             plan.value = {
                 start_date: targetDate,
                 end_date: endDate,
                 status: 'DRAFT',
-                assignment: targetAssignment,
+                assignment: parseInt(route.query.assignment),
                 recipients: [],
                 description: '',
-                attachment: null
-            };
-            
-            submitted.value = false;
-            planDialog.value = true;
+                attachments: [] // Lista de anexos existentes
+             };
+             newAttachments.value = [];
+             submitted.value = false;
+             planDialog.value = true;
         }
 
     } catch (e) {
@@ -100,27 +87,30 @@ const openNew = () => {
     const first = curr.getDate() - curr.getDay() + 1; 
     const last = first + 4; 
 
-    let preSelectedId = null;
-    if (route.query.assignment) {
-        preSelectedId = parseInt(route.query.assignment);
-    }
-
     plan.value = {
         start_date: new Date(curr.setDate(first)),
         end_date: new Date(curr.setDate(last)),
         status: 'DRAFT',
-        assignment: preSelectedId,
-        recipients: [], // Mantido
-        description: '', // Desenvolvimento
-        attachment: null
+        assignment: route.query.assignment ? parseInt(route.query.assignment) : null,
+        recipients: [],
+        description: '',
+        attachments: [] // Backend deve retornar array de objetos {id, url, name}
     };
+    newAttachments.value = [];
     submitted.value = false;
     planDialog.value = true;
 };
 
 const editPlan = (item) => {
+    // Clona o item
     plan.value = { ...item };
     
+    // Garante que attachments seja array
+    if (!plan.value.attachments) plan.value.attachments = [];
+    
+    // Limpa novos anexos ao abrir edição
+    newAttachments.value = []; 
+
     // Tratamento de Datas
     if (plan.value.start_date && typeof plan.value.start_date === 'string') 
         plan.value.start_date = new Date(plan.value.start_date + 'T00:00:00');
@@ -130,8 +120,49 @@ const editPlan = (item) => {
     planDialog.value = true;
 };
 
+// --- NOVA LÓGICA DE UPLOAD (Múltiplos + Validação) ---
 const onFileSelect = (event) => {
-    plan.value.attachment = event.files[0];
+    const files = event.files;
+    const maxFileSize = 2 * 1024 * 1024; // 2 MB
+    const maxFileCount = 5;
+
+    // 1. Validação de Quantidade
+    if (newAttachments.value.length + files.length > maxFileCount) {
+        toast.add({ severity: 'error', summary: 'Limite Excedido', detail: `Máximo de ${maxFileCount} arquivos permitidos.`, life: 4000 });
+        // Limpa a seleção do componente visual
+        if (fileUploadRef.value) fileUploadRef.value.clear();
+        return;
+    }
+
+    // 2. Validação de Tamanho (Arquivo por Arquivo)
+    for (let file of files) {
+        if (file.size > maxFileSize) {
+            toast.add({ 
+                severity: 'error', 
+                summary: 'Arquivo muito grande', 
+                detail: `O arquivo "${file.name}" excede 2MB.`, 
+                life: 5000 
+            });
+            if (fileUploadRef.value) fileUploadRef.value.clear();
+            return;
+        }
+    }
+
+    // Se passou nas validações, adiciona à lista temporária
+    // Usamos spread para manter os anteriores se o usuário adicionar em lotes
+    files.forEach(f => {
+        // Evita duplicatas de nome na lista de novos
+        if (!newAttachments.value.some(existing => existing.name === f.name)) {
+            newAttachments.value.push(f);
+        }
+    });
+    
+    // Limpa o input visual para permitir selecionar mais depois
+    if (fileUploadRef.value) fileUploadRef.value.clear();
+};
+
+const removeNewAttachment = (index) => {
+    newAttachments.value.splice(index, 1);
 };
 
 const savePlan = async (forceSubmit = false) => {
@@ -142,15 +173,17 @@ const savePlan = async (forceSubmit = false) => {
         return;
     }
 
-    // --- USANDO FORMDATA (Obrigatório para Arquivos) ---
     const formData = new FormData();
     formData.append('assignment', plan.value.assignment);
     formData.append('topic', plan.value.topic);
-    formData.append('description', plan.value.description || ''); // Editor Content
+    formData.append('description', plan.value.description || '');
     
-    // Se tiver destinatários (array), envia (pode precisar de ajuste no backend para ManyToMany)
+    // --- CORREÇÃO DO MULTISELECT DE COORDENADORES ---
+    // Django espera múltiplas chaves 'recipients' para criar uma lista
     if (plan.value.recipients && Array.isArray(plan.value.recipients)) {
-       // formData.append('recipients', JSON.stringify(plan.value.recipients)); // Opcional
+       plan.value.recipients.forEach(id => {
+           formData.append('recipients', id);
+       });
     }
 
     const formatDate = (d) => {
@@ -161,16 +194,15 @@ const savePlan = async (forceSubmit = false) => {
     formData.append('start_date', formatDate(plan.value.start_date));
     formData.append('end_date', formatDate(plan.value.end_date));
 
-    if (forceSubmit) {
-        formData.append('status', 'SUBMITTED');
-    } else {
-        formData.append('status', plan.value.status || 'DRAFT');
-    }
+    if (forceSubmit) formData.append('status', 'SUBMITTED');
+    else formData.append('status', plan.value.status || 'DRAFT');
 
-    // Anexo (Só envia se for File novo)
-    if (plan.value.attachment instanceof File) {
-        formData.append('attachment', plan.value.attachment);
-    }
+    // --- CORREÇÃO DOS ANEXOS MÚLTIPLOS ---
+    // Envia cada arquivo como um item na lista 'attachments'
+    // IMPORTANTE: O Backend precisa aceitar 'attachments' (plural) no request.FILES
+    newAttachments.value.forEach(file => {
+        formData.append('attachments', file);
+    });
 
     try {
         const config = { headers: { 'Content-Type': 'multipart/form-data' } };
@@ -186,7 +218,8 @@ const savePlan = async (forceSubmit = false) => {
         loadData();
     } catch (error) {
         console.error(error);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar.', life: 3000 });
+        const msg = error.response?.data?.detail || 'Erro ao salvar. Verifique o tamanho dos arquivos.';
+        toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 4000 });
     }
 };
 
@@ -223,7 +256,6 @@ const getStatusLabel = (status) => {
 };
 
 const clearFilter = () => { router.push({ name: 'lesson-plans' }); };
-const onSearch = () => { /* Busca via v-model */ };
 
 onMounted(() => { loadData(); });
 </script>
@@ -277,11 +309,23 @@ onMounted(() => { loadData(); });
 
                 <Column field="topic" header="Tópico" sortable style="width: 25%"></Column>
                 
-                <Column header="Anexo" style="width: 5%">
+                <Column header="Anexos" style="width: 10%">
                     <template #body="slotProps">
-                        <a v-if="slotProps.data.attachment" :href="slotProps.data.attachment" target="_blank" class="text-primary" v-tooltip.top="'Baixar Anexo'">
-                            <i class="pi pi-paperclip text-xl"></i>
-                        </a>
+                        <div v-if="slotProps.data.attachments && slotProps.data.attachments.length > 0" class="flex gap-2">
+                            <span v-if="slotProps.data.attachments.length === 1">
+                                <a :href="slotProps.data.attachments[0].file || slotProps.data.attachments[0]" target="_blank" class="text-primary" v-tooltip.top="'Baixar'">
+                                    <i class="pi pi-paperclip text-xl"></i>
+                                </a>
+                            </span>
+                            <span v-else class="cursor-pointer text-primary font-bold" @click="editPlan(slotProps.data)" v-tooltip.top="'Ver arquivos'">
+                                <i class="pi pi-folder text-xl mr-1"></i> {{ slotProps.data.attachments.length }}
+                            </span>
+                        </div>
+                        <div v-else-if="slotProps.data.attachment">
+                             <a :href="slotProps.data.attachment" target="_blank" class="text-primary">
+                                <i class="pi pi-paperclip text-xl"></i>
+                            </a>
+                        </div>
                     </template>
                 </Column>
 
@@ -311,9 +355,10 @@ onMounted(() => { loadData(); });
                             optionValue="id" 
                             placeholder="Selecione..." 
                             display="chip"
+                            filter
                             fluid
                         />
-                        <small class="text-gray-500">Notificar coordenadores específicos (opcional).</small>
+                        <small class="text-gray-500">Selecione quem deve receber este planejamento.</small>
                     </div>
 
                     <div class="col-span-12 xl:col-span-6">
@@ -347,21 +392,44 @@ onMounted(() => { loadData(); });
                     </div>
 
                     <div class="col-span-12 xl:col-span-12">
-                        <label class="block font-bold mb-3">Anexar Planejamento/Atividade (PDF, Office, Img)</label>
+                        <label class="block font-bold mb-3">Anexar Materiais (Máx 5 arquivos de 2MB)</label>
+                        
                         <FileUpload 
+                            ref="fileUploadRef"
                             mode="basic" 
-                            name="attachment" 
+                            name="attachments" 
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" 
-                            :maxFileSize="5000000" 
+                            :maxFileSize="2097152" 
+                            :fileLimit="5"
+                            multiple
                             @select="onFileSelect" 
                             :auto="false" 
-                            chooseLabel="Escolher Arquivo" 
+                            chooseLabel="Escolher Arquivos" 
                             class="w-full"
                         />
-                        <div v-if="plan.attachment && typeof plan.attachment === 'string'" class="mt-2 p-2 border border-gray-200 rounded flex items-center gap-2">
-                            <i class="pi pi-check-circle text-green-500"></i>
-                            <span class="text-sm">Arquivo salvo: </span>
-                            <a :href="plan.attachment" target="_blank" class="text-primary font-bold hover:underline">Visualizar</a>
+                        
+                        <div v-if="newAttachments.length > 0" class="mt-3">
+                            <h6 class="text-sm font-bold text-gray-700 mb-2">Novos arquivos para envio:</h6>
+                            <ul class="list-none p-0 m-0">
+                                <li v-for="(file, index) in newAttachments" :key="index" class="flex align-items-center justify-content-between p-2 surface-100 border-round mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <i class="pi pi-file text-primary"></i>
+                                        <span class="text-sm">{{ file.name }}</span>
+                                        <span class="text-xs text-gray-500">({{ (file.size / 1024 / 1024).toFixed(2) }} MB)</span>
+                                    </div>
+                                    <Button icon="pi pi-times" class="p-button-rounded p-button-danger p-button-text p-button-sm" @click="removeNewAttachment(index)" />
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div v-if="plan.attachments && plan.attachments.length > 0" class="mt-3">
+                             <h6 class="text-sm font-bold text-gray-700 mb-2">Arquivos salvos:</h6>
+                             <div v-for="att in plan.attachments" :key="att.id || att" class="p-2 border border-gray-200 rounded flex items-center gap-2 mb-1">
+                                <i class="pi pi-check-circle text-green-500"></i>
+                                <a :href="att.file || att" target="_blank" class="text-primary font-bold hover:underline flex-1 truncate">
+                                    {{ att.name || 'Visualizar Anexo' }}
+                                </a>
+                             </div>
                         </div>
                     </div>
 
@@ -390,7 +458,7 @@ onMounted(() => { loadData(); });
             </Dialog>
 
             <Dialog v-model:visible="deleteDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
-                <div class="flex align-items-center justify-content-center">
+                <div class="flex align-items-center justify-center">
                     <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
                     <span>Remover este planejamento?</span>
                 </div>

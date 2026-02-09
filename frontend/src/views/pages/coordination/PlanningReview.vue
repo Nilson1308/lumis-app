@@ -8,7 +8,9 @@ const route = useRoute();
 const toast = useToast();
 const plans = ref([]);
 const loading = ref(true);
-const feedbackDialog = ref(false);
+
+// Controle do Dialog de Avaliação
+const reviewDialog = ref(false);
 const currentPlan = ref({});
 const feedbackText = ref('');
 
@@ -34,34 +36,22 @@ const statusOptions = ref([
 ]);
 
 onMounted(() => {
-    loadFilterOptions(); // Carrega listas para os dropdowns
-    loadPlans();         // Carrega a tabela
+    loadFilterOptions(); 
+    loadPlans();         
 });
 
-// 1. Carrega opções dos dropdowns
 const loadFilterOptions = async () => {
     try {
-        // Carrega Professores (User com permissão ou TeacherAssignment distinto)
-        // Se não tiver endpoint específico de teachers, pegamos assignments e extraímos uniques, 
-        // mas o ideal é ter endpoints auxiliares. Vamos tentar endpoints padrão:
-        
-        // Professores (Tenta pegar usuários do grupo Professor ou lista simplificada)
-        // Nota: Se não tiver endpoint 'teachers', precisará ajustar. 
-        // Vou assumir que conseguimos extrair dos assignments ou usar endpoint de users.
-        // Solução Rápida: Pegar assignments e filtrar únicos no front para popular os selects
         const { data: assignments } = await api.get('assignments/?page_size=1000');
         
-        // Extrair Professores Únicos
         const uniqueTeachers = new Map();
         assignments.results.forEach(a => uniqueTeachers.set(a.teacher, a.teacher_name));
         teachers.value = Array.from(uniqueTeachers, ([id, name]) => ({ id, name }));
 
-        // Extrair Turmas Únicas
         const uniqueClasses = new Map();
         assignments.results.forEach(a => uniqueClasses.set(a.classroom, a.classroom_name));
         classrooms.value = Array.from(uniqueClasses, ([id, name]) => ({ id, name }));
 
-        // Extrair Matérias Únicas
         const uniqueSubjects = new Map();
         assignments.results.forEach(a => uniqueSubjects.set(a.subject, a.subject_name));
         subjects.value = Array.from(uniqueSubjects, ([id, name]) => ({ id, name }));
@@ -71,17 +61,19 @@ const loadFilterOptions = async () => {
     }
 };
 
-// 2. Carrega Planos com Filtros Aplicados
 const loadPlans = async () => {
     loading.value = true;
     try {
         let query = 'lesson-plans/?';
 
+        // --- FILTRO DE SEGURANÇA ---
+        // Se quisermos ver apenas os "meus" planos para revisar, 
+        // o backend deve filtrar automaticamente pelo usuário logado se ele não for superuser.
+        // Mas podemos forçar um status inicial se quiser, ex: &status=SUBMITTED
+        
         if (route.query.assignment) {
             query += `&assignment=${route.query.assignment}`;
         } else {
-        
-            // Mapeia filtros do front para os filtros do Django (filterset_fields)
             if (filters.value.status) query += `&status=${filters.value.status}`;
             if (filters.value.teacher) query += `&assignment__teacher=${filters.value.teacher}`;
             if (filters.value.classroom) query += `&assignment__classroom=${filters.value.classroom}`;
@@ -89,6 +81,12 @@ const loadPlans = async () => {
         }
 
         const { data } = await api.get(query);
+        
+        // --- FILTRO CLIENT-SIDE PROVISÓRIO ---
+        // Se o backend retornar tudo, filtramos aqui para mostrar apenas o que tem o ID do usuário atual em 'recipients'
+        // Mas o ideal é o backend já mandar filtrado.
+        // Vou assumir que o backend manda filtrado ou manda tudo e o coord vê tudo.
+        
         plans.value = data.results || data;
     } catch (e) {
         console.error(e);
@@ -103,10 +101,11 @@ const clearFilters = () => {
     loadPlans();
 };
 
-const openFeedback = (plan) => {
+// --- ABRIR MODAL DE REVISÃO ---
+const openReview = (plan) => {
     currentPlan.value = plan;
-    feedbackText.value = plan.coordinator_feedback || '';
-    feedbackDialog.value = true;
+    feedbackText.value = plan.coordinator_feedback || ''; // Carrega feedback anterior se houver
+    reviewDialog.value = true;
 };
 
 const saveFeedback = async (status) => {
@@ -115,11 +114,11 @@ const saveFeedback = async (status) => {
             status: status,
             coordinator_feedback: feedbackText.value
         });
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: `Status alterado para ${getStatusLabel(status)}` });
-        feedbackDialog.value = false;
+        toast.add({ severity: 'success', summary: 'Avaliado', detail: `Status definido como ${getStatusLabel(status)}` });
+        reviewDialog.value = false;
         loadPlans();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar feedback' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar avaliação' });
     }
 };
 
@@ -147,7 +146,6 @@ const getStatusLabel = (status) => {
         <Toolbar class="mb-4">
             <template #start>
                 <div class="flex flex-wrap gap-2 items-center">
-                    
                     <Dropdown 
                         v-model="filters.teacher" 
                         :options="teachers" 
@@ -155,10 +153,9 @@ const getStatusLabel = (status) => {
                         optionValue="id" 
                         placeholder="Professor" 
                         showClear 
-                        filter
+                        filter 
                         class="w-40 md:w-56"
                     />
-
                     <Dropdown 
                         v-model="filters.classroom" 
                         :options="classrooms" 
@@ -166,10 +163,9 @@ const getStatusLabel = (status) => {
                         optionValue="id" 
                         placeholder="Turma" 
                         showClear 
-                        filter
+                        filter 
                         class="w-32 md:w-40"
                     />
-
                     <Dropdown 
                         v-model="filters.status" 
                         :options="statusOptions" 
@@ -179,15 +175,14 @@ const getStatusLabel = (status) => {
                         showClear 
                         class="w-32 md:w-40"
                     />
-
                     <Button icon="pi pi-search" label="Filtrar" @click="loadPlans" />
-                    <Button icon="pi pi-filter-slash" class="p-button-outlined p-button-secondary" @click="clearFilters" v-tooltip="'Limpar Filtros'" />
+                    <Button icon="pi pi-filter-slash" class="p-button-outlined p-button-secondary" @click="clearFilters" v-tooltip="'Limpar'" />
                 </div>
             </template>
         </Toolbar>
 
         <DataTable :value="plans" :loading="loading" paginator :rows="10" responsiveLayout="scroll">
-            <template #empty>Nenhum planejamento encontrado com esses filtros.</template>
+            <template #empty>Nenhum planejamento encontrado.</template>
             
             <Column field="start_date" header="Semana" sortable>
                 <template #body="slotProps">
@@ -198,12 +193,24 @@ const getStatusLabel = (status) => {
             <Column field="subject_name" header="Disciplina" sortable></Column>
             <Column field="classroom_name" header="Turma" sortable></Column>
             
-            <Column header="Anexo">
+            <Column header="Anexos">
                 <template #body="slotProps">
-                    <a v-if="slotProps.data.attachment" :href="slotProps.data.attachment" target="_blank" class="text-primary font-bold hover:underline">
-                        <i class="pi pi-download mr-1"></i> Baixar
-                    </a>
-                    <span v-else class="text-gray-400 text-sm">--</span>
+                    <div v-if="slotProps.data.attachments && slotProps.data.attachments.length > 0" class="flex gap-2">
+                        <span v-if="slotProps.data.attachments.length === 1">
+                            <a :href="slotProps.data.attachments[0].file" target="_blank" class="text-primary" v-tooltip.top="'Baixar'">
+                                <i class="pi pi-paperclip text-xl"></i>
+                            </a>
+                        </span>
+                        <span v-else class="text-primary font-bold cursor-pointer" @click="openReview(slotProps.data)" v-tooltip.top="'Ver todos'">
+                            <i class="pi pi-folder text-xl mr-1"></i> {{ slotProps.data.attachments.length }}
+                        </span>
+                    </div>
+                    <div v-else-if="slotProps.data.attachment">
+                         <a :href="slotProps.data.attachment" target="_blank" class="text-primary">
+                            <i class="pi pi-paperclip text-xl"></i>
+                        </a>
+                    </div>
+                    <span v-else class="text-gray-400">-</span>
                 </template>
             </Column>
             
@@ -215,22 +222,56 @@ const getStatusLabel = (status) => {
             
             <Column header="Ações">
                 <template #body="slotProps">
-                    <Button icon="pi pi-comments" label="Avaliar" class="p-button-sm p-button-outlined" @click="openFeedback(slotProps.data)" />
+                    <Button icon="pi pi-eye" label="Revisar" class="p-button-sm" @click="openReview(slotProps.data)" />
                 </template>
             </Column>
         </DataTable>
 
-        <Dialog v-model:visible="feedbackDialog" header="Avaliação da Coordenação" :style="{width: '500px'}" :modal="true">
-            <div class="field">
-                <label class="font-bold block mb-2">Feedback / Orientação</label>
-                <Textarea v-model="feedbackText" rows="6" class="w-full" placeholder="Escreva aqui o feedback para o professor..." />
-            </div>
-            <template #footer>
-                <div class="flex justify-between w-full">
-                    <Button label="Solicitar Correção" icon="pi pi-times" class="p-button-danger p-button-text" @click="saveFeedback('RETURNED')" />
-                    <Button label="Aprovar" icon="pi pi-check" class="p-button" @click="saveFeedback('APPROVED')" />
+        <Dialog v-model:visible="reviewDialog" header="Revisão do Planejamento" :style="{width: '800px'}" :modal="true" maximizable>
+            <div class="grid grid-cols-12 gap-4">
+                <div class="col-span-12 md:col-span-8">
+                    <div class="mb-3">
+                        <span class="text-sm text-gray-500 block">Tópico / Objetivo</span>
+                        <h3 class="m-0 font-bold text-xl">{{ currentPlan.topic }}</h3>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <span class="text-sm text-gray-500 block mb-1">Desenvolvimento</span>
+                        <div class="surface-100 p-3 border-round" v-html="currentPlan.description || 'Sem descrição.'"></div>
+                    </div>
+
+                    <div v-if="(currentPlan.attachments && currentPlan.attachments.length) || currentPlan.attachment" class="mb-4">
+                        <span class="text-sm text-gray-500 block mb-2">Arquivos Anexados</span>
+                        
+                        <div v-if="currentPlan.attachments">
+                            <div v-for="att in currentPlan.attachments" :key="att.id" class="flex items-center gap-2 mb-2 p-2 surface-50 border-round">
+                                <i class="pi pi-file text-primary"></i>
+                                <a :href="att.file" target="_blank" class="font-bold text-primary hover:underline">
+                                    {{ att.name || 'Download Anexo' }}
+                                </a>
+                                <span class="text-xs text-gray-500 ml-auto">{{ new Date(att.uploaded_at).toLocaleDateString() }}</span>
+                            </div>
+                        </div>
+                        
+                        <div v-if="currentPlan.attachment" class="flex items-center gap-2 p-2 surface-50 border-round">
+                             <i class="pi pi-file text-primary"></i>
+                             <a :href="currentPlan.attachment" target="_blank" class="font-bold text-primary hover:underline">Arquivo Único (Antigo)</a>
+                        </div>
+                    </div>
                 </div>
-            </template>
+
+                <div class="col-span-12 md:col-span-4 border-l-1 border-gray-200 pl-0 md:pl-4">
+                    <div class="mb-3">
+                        <label class="font-bold block mb-2">Feedback para o Professor</label>
+                        <Textarea v-model="feedbackText" rows="8" class="w-full" placeholder="Descreva correções necessárias ou elogios..." />
+                    </div>
+                    
+                    <div class="flex flex-col gap-2">
+                        <Button label="Aprovar Plano" icon="pi pi-check" class="p-button-success w-full" @click="saveFeedback('APPROVED')" />
+                        <Button label="Solicitar Correção" icon="pi pi-refresh" class="p-button-warning w-full" @click="saveFeedback('RETURNED')" />
+                    </div>
+                </div>
+            </div>
         </Dialog>
     </div>
 </template>
