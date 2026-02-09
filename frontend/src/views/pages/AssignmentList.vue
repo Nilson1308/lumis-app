@@ -4,94 +4,85 @@ import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
 const toast = useToast();
-const dt = ref();
-
-// --- ESTADOS ---
 const assignments = ref([]);
-const assignment = ref({});
-const loading = ref(true);
 const assignmentDialog = ref(false);
-const deleteDialog = ref(false);
+const deleteAssignmentDialog = ref(false);
+const assignment = ref({});
 const submitted = ref(false);
+const loading = ref(false);
 
-// --- LISTAS PARA DROPDOWNS ---
+// Listas para os Dropdowns
 const teachers = ref([]);
-const subjects = ref([]);
 const classrooms = ref([]);
+const subjects = ref([]);
 
-// --- FILTROS E PAGINAÇÃO ---
+// --- PAGINAÇÃO E FILTROS ---
 const totalRecords = ref(0);
-const lazyParams = ref({
-    first: 0,
-    rows: 10,
-    page: 1,
-});
+const lazyParams = ref({ first: 0, rows: 10, page: 0 });
 const globalFilter = ref('');
 
-// Filtros específicos (Dropdowns do Header)
-const filterTeacher = ref(null);
-const filterSubject = ref(null);
+// Variáveis de Filtro
 const filterClassroom = ref(null);
+const filterSubject = ref(null);
+const filterTeacher = ref(null);
 
-// --- CARREGAR DEPENDÊNCIAS ---
+// --- 1. CARREGAR DEPENDÊNCIAS (Listas para os Dropdowns) ---
 const loadDependencies = async () => {
     try {
-        const [resTeachers, resSubjects, resClasses] = await Promise.all([
-            api.get('users/?page_size=1000'), // Traz usuários para filtrar front (MVP)
+        const [resClass, resSubj, resUsers] = await Promise.all([
+            api.get('classrooms/?page_size=1000'),
             api.get('subjects/?page_size=1000'),
-            api.get('classrooms/?page_size=1000')
+            api.get('users/?role=teacher&page_size=1000') 
         ]);
+
+        classrooms.value = resClass.data.results;
+        subjects.value = resSubj.data.results;
         
-        // Filtra apenas quem é professor
-        teachers.value = resTeachers.data.results.filter(u => u.is_teacher);
-        subjects.value = resSubjects.data.results;
-        classrooms.value = resClasses.data.results;
+        teachers.value = resUsers.data.results.map(u => ({
+            ...u,
+            full_name: (u.first_name || u.last_name) ? `${u.first_name} ${u.last_name}` : u.username
+        }));
     } catch (e) {
-        console.error("Erro ao carregar dependências");
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar listas.' });
     }
 };
 
-// --- LISTAR ATRIBUIÇÕES (Com Filtros e Paginação) ---
+// --- 2. BUSCAR DADOS DA TABELA (Server-Side) ---
 const fetchAssignments = async () => {
     loading.value = true;
     try {
-        const pageNumber = (lazyParams.value.first / lazyParams.value.rows) + 1;
-        
-        // Monta os parâmetros da URL
+        const page = lazyParams.value.page + 1; // Django inicia em 1
+        const rows = lazyParams.value.rows;
+
+        // Monta os parâmetros
         const params = {
-            page: pageNumber,
-            page_size: lazyParams.value.rows,
+            page: page,
+            page_size: rows,
             search: globalFilter.value,
-            // Adiciona filtros se estiverem selecionados
-            teacher: filterTeacher.value,
+            classroom: filterClassroom.value,
             subject: filterSubject.value,
-            classroom: filterClassroom.value
+            teacher: filterTeacher.value
         };
 
-        const response = await api.get('assignments/', { params });
-        assignments.value = response.data.results;
-        totalRecords.value = response.data.count;
-        
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar atribuições', life: 3000 });
+        const res = await api.get('assignments/', { params });
+        assignments.value = res.data.results;
+        totalRecords.value = res.data.count;
+
+    } catch (e) {
+        console.error(e);
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar atribuições.' });
     } finally {
         loading.value = false;
     }
 };
 
-// Observadores para recarregar a tabela ao mudar filtros
-watch([filterTeacher, filterSubject, filterClassroom], () => {
-    lazyParams.value.first = 0; // Volta pra pag 1
+// --- WATCHERS (Recarregar ao filtrar) ---
+watch([filterClassroom, filterSubject, filterTeacher], () => {
+    lazyParams.value.first = 0; // Volta para página 1
+    lazyParams.value.page = 0;
     fetchAssignments();
 });
-
-const clearFilters = () => {
-    filterTeacher.value = null;
-    filterSubject.value = null;
-    filterClassroom.value = null;
-    globalFilter.value = ''; // Opcional: limpa também a busca textual
-    // Como temos 'watch' nessas variáveis, a tabela recarregará sozinha
-};
 
 const onPage = (event) => {
     lazyParams.value = event;
@@ -103,74 +94,80 @@ const onSearch = () => {
     clearTimeout(timeout);
     timeout = setTimeout(() => {
         lazyParams.value.first = 0;
+        lazyParams.value.page = 0;
         fetchAssignments();
     }, 500);
 };
 
-// --- AÇÕES ---
+const clearFilters = () => {
+    filterClassroom.value = null;
+    filterSubject.value = null;
+    filterTeacher.value = null;
+    globalFilter.value = '';
+    onSearch();
+};
+
+// --- AÇÕES CRUD ---
 const openNew = () => {
     assignment.value = {};
     submitted.value = false;
     assignmentDialog.value = true;
 };
 
-const hideDialog = () => {
-    assignmentDialog.value = false;
-    submitted.value = false;
-};
-
-// --- EDIÇÃO ---
 const editAssignment = (item) => {
-    // Clona o objeto para não alterar a tabela diretamente
-    assignment.value = { ...item };
+    // Clona o item
+    const data = { ...item };
+    
+    // CORREÇÃO IMPORTANTE:
+    // Se o backend enviar objetos aninhados (ex: { id: 1, name: 'Matemática' }),
+    // precisamos extrair apenas o ID para o Dropdown funcionar.
+    if (typeof data.classroom === 'object') data.classroom = data.classroom.id;
+    if (typeof data.subject === 'object') data.subject = data.subject.id;
+    if (typeof data.teacher === 'object') data.teacher = data.teacher.id;
+
+    assignment.value = data;
     assignmentDialog.value = true;
 };
 
-const confirmDelete = (item) => {
+const confirmDeleteAssignment = (item) => {
     assignment.value = item;
-    deleteDialog.value = true;
+    deleteAssignmentDialog.value = true;
 };
 
-// --- SALVAR (CRIAR OU EDITAR) ---
 const saveAssignment = async () => {
     submitted.value = true;
+    if (!assignment.value.teacher || !assignment.value.classroom || !assignment.value.subject) return;
 
-    if (assignment.value.teacher && assignment.value.subject && assignment.value.classroom) {
-        try {
-            if (assignment.value.id) {
-                // UPDATE (PUT)
-                await api.put(`assignments/${assignment.value.id}/`, assignment.value);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atribuição atualizada!', life: 3000 });
-            } else {
-                // CREATE (POST)
-                await api.post('assignments/', assignment.value);
-                toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aula atribuída!', life: 3000 });
-            }
-            
-            assignmentDialog.value = false;
-            fetchAssignments();
-        } catch (error) {
-            // Verifica duplicidade ou erros gerais
-            const msg = error.response?.data?.non_field_errors?.[0] || 'Erro ao salvar. Verifique conflitos.';
-            toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 3000 });
+    try {
+        if (assignment.value.id) {
+            await api.put(`assignments/${assignment.value.id}/`, assignment.value);
+            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado com sucesso' });
+        } else {
+            await api.post('assignments/', assignment.value);
+            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado com sucesso' });
         }
+        assignmentDialog.value = false;
+        fetchAssignments(); // Recarrega a lista
+    } catch (e) {
+        const msg = e.response?.data?.non_field_errors?.[0] || 'Erro ao salvar.';
+        toast.add({ severity: 'error', summary: 'Erro', detail: msg });
     }
 };
 
 const deleteAssignment = async () => {
     try {
         await api.delete(`assignments/${assignment.value.id}/`);
-        deleteDialog.value = false;
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atribuição removida', life: 3000 });
-        fetchAssignments();
-    } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao remover', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido com sucesso' });
+        deleteAssignmentDialog.value = false;
+        fetchAssignments(); // Recarrega a lista
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir' });
     }
 };
 
 onMounted(() => {
-    loadDependencies();
-    fetchAssignments();
+    loadDependencies(); // Carrega listas uma vez
+    fetchAssignments(); // Carrega dados da tabela
 });
 </script>
 
@@ -178,9 +175,8 @@ onMounted(() => {
     <div class="col-12">
         <div class="card">
             <Toast />
-            
             <Toolbar class="mb-4">
-                <template v-slot:start>
+                <template #start>
                     <div class="my-2">
                         <Button label="Nova Atribuição" icon="pi pi-plus" class="mr-2" @click="openNew" />
                     </div>
@@ -188,14 +184,14 @@ onMounted(() => {
             </Toolbar>
 
             <DataTable 
-                ref="dt"
                 :value="assignments" 
                 :lazy="true" 
                 :paginator="true" 
                 :rows="10" 
                 :totalRecords="totalRecords"
-                :loading="loading"
-                @page="onPage"
+                :loading="loading" 
+                @page="onPage" 
+                :first="lazyParams.first"
                 responsiveLayout="scroll"
             >
                 <template #header>
@@ -206,149 +202,79 @@ onMounted(() => {
                                 <InputIcon>
                                     <i class="pi pi-search" />
                                 </InputIcon>
-                                <InputText v-model="globalFilter" placeholder="Buscar geral..." @input="onSearch" />
+                                <InputText v-model="globalFilter" placeholder="Buscar..." @input="onSearch" />
                             </IconField>
                         </div>
-                        
-                        <div class="flex flex-col md:flex-row gap-3">
-                            <Dropdown 
-                                v-model="filterTeacher" 
-                                :options="teachers" 
-                                optionLabel="username" 
-                                optionValue="id" 
-                                placeholder="Filtrar por Professor" 
-                                showClear
-                                class="w-full"
-                            >
-                                <template #option="slotProps">
-                                    {{ slotProps.option.first_name ? slotProps.option.first_name : slotProps.option.username }}
-                                </template>
-                                <template #value="slotProps">
-                                    <span v-if="slotProps.value">
-                                        {{ teachers.find(t => t.id === slotProps.value)?.first_name || 'Professor' }}
-                                    </span>
-                                    <span v-else>{{ slotProps.placeholder }}</span>
-                                </template>
-                            </Dropdown>
 
-                            <Dropdown 
-                                v-model="filterSubject" 
-                                :options="subjects" 
-                                optionLabel="name" 
-                                optionValue="id" 
-                                placeholder="Filtrar por Matéria" 
-                                showClear
-                                class="w-full"
-                            />
-
-                            <Dropdown 
-                                v-model="filterClassroom" 
-                                :options="classrooms" 
-                                optionLabel="name" 
-                                optionValue="id" 
-                                placeholder="Filtrar por Turma" 
-                                showClear
-                                class="w-full"
-                            />
-
-                            <Button 
-                                type="button" 
-                                icon="pi pi-filter-slash" 
-                                label=" " 
-                                class="p-button w-full md:w-auto" 
-                                @click="clearFilters" 
-                                v-tooltip.top="'Limpar todos os filtros'"
-                            />
+                        <div class="grid grid-cols-12 gap-2">
+                            <div class="col-span-12 md:col-span-3">
+                                <Dropdown v-model="filterClassroom" :options="classrooms" optionLabel="name" optionValue="id" placeholder="Filtrar Turma" showClear class="w-full" />
+                            </div>
+                            <div class="col-span-12 md:col-span-3">
+                                <Dropdown v-model="filterSubject" :options="subjects" optionLabel="name" optionValue="id" placeholder="Filtrar Matéria" showClear class="w-full" />
+                            </div>
+                            <div class="col-span-12 md:col-span-3">
+                                <Dropdown v-model="filterTeacher" :options="teachers" optionLabel="full_name" optionValue="id" placeholder="Filtrar Professor" showClear class="w-full" />
+                            </div>
+                            <div class="col-span-12 md:col-span-3">
+                                <Button icon="pi pi-filter-slash" label="Limpar" class="p-button-outlined w-full" @click="clearFilters" />
+                            </div>
                         </div>
                     </div>
                 </template>
-                
-                <template #empty>Nenhuma aula encontrada.</template>
 
-                <Column field="teacher_name" header="Professor" sortable></Column>
-                <Column field="subject_name" header="Matéria" sortable></Column>
+                <template #empty>Nenhum registro encontrado.</template>
+
                 <Column field="classroom_name" header="Turma" sortable></Column>
-                <Column field="classroom_year" header="Ano"></Column>
+                <Column field="subject_name" header="Matéria" sortable></Column>
+                <Column field="teacher_name" header="Professor" sortable>
+                    <template #body="slotProps">
+                        <span class="font-bold">{{ slotProps.data.teacher_name }}</span>
+                    </template>
+                </Column>
                 
-                <Column header="Ações" style="width: 15%">
+                <Column header="Ações">
                     <template #body="slotProps">
                         <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editAssignment(slotProps.data)" />
-                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
+                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDeleteAssignment(slotProps.data)" />
                     </template>
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="assignmentDialog" :header="assignment.id ? 'Editar Atribuição' : 'Nova Atribuição'" :modal="true" :style="{ width: '450px' }" class="p-fluid">
+            <Dialog v-model:visible="assignmentDialog" :style="{ width: '450px' }" :header="assignment.id ? 'Editar Atribuição' : 'Nova Atribuição'" :modal="true" class="p-fluid">
                 
-                <div class="mb-2">
-                    <label class="mb-2 block font-bold">Professor</label>
-                    <Dropdown 
-                        v-model="assignment.teacher" 
-                        :options="teachers" 
-                        optionLabel="username" 
-                        optionValue="id" 
-                        placeholder="Selecione o Professor" 
-                        filter
-                        :class="{ 'p-invalid': submitted && !assignment.teacher }"
-                        fluid
-                    >
-                        <template #option="slotProps">
-                            {{ slotProps.option.first_name ? slotProps.option.first_name + ' ' + slotProps.option.last_name : slotProps.option.username }}
-                        </template>
-                        <template #value="slotProps">
-                            <span v-if="slotProps.value">
-                                {{ teachers.find(t => t.id === slotProps.value)?.first_name || teachers.find(t => t.id === slotProps.value)?.username || 'Selecionado' }}
-                            </span>
-                            <span v-else>{{ slotProps.placeholder }}</span>
-                        </template>
-                    </Dropdown>
-                    <small class="p-error" v-if="submitted && !assignment.teacher">Professor é obrigatório.</small>
+                <div class="mb-3">
+                    <label class="block font-bold mb-2">Turma</label>
+                    <Dropdown v-model="assignment.classroom" :options="classrooms" optionLabel="name" optionValue="id" placeholder="Selecione..." filter fluid />
+                    <small class="p-error" v-if="submitted && !assignment.classroom">Obrigatório.</small>
                 </div>
 
-                <div class="mb-2">
-                    <label class="mb-2 block font-bold">Matéria</label>
-                    <Dropdown 
-                        v-model="assignment.subject" 
-                        :options="subjects" 
-                        optionLabel="name" 
-                        optionValue="id" 
-                        placeholder="Selecione a Matéria" 
-                        filter
-                        :class="{ 'p-invalid': submitted && !assignment.subject }"
-                        fluid
-                    />
-                    <small class="p-error" v-if="submitted && !assignment.subject">Matéria é obrigatória.</small>
+                <div class="mb-3">
+                    <label class="block font-bold mb-2">Matéria</label>
+                    <Dropdown v-model="assignment.subject" :options="subjects" optionLabel="name" optionValue="id" placeholder="Selecione..." filter fluid />
+                    <small class="p-error" v-if="submitted && !assignment.subject">Obrigatório.</small>
                 </div>
 
-                <div class="mb-2">
-                    <label class="mb-2 block font-bold">Turma</label>
-                    <Dropdown 
-                        v-model="assignment.classroom" 
-                        :options="classrooms" 
-                        optionLabel="name" 
-                        optionValue="id" 
-                        placeholder="Selecione a Turma" 
-                        filter
-                        :class="{ 'p-invalid': submitted && !assignment.classroom }"
-                        fluid
-                    />
-                    <small class="p-error" v-if="submitted && !assignment.classroom">Turma é obrigatória.</small>
+                <div class="mb-3">
+                    <label class="block font-bold mb-2">Professor</label>
+                    <Dropdown v-model="assignment.teacher" :options="teachers" optionLabel="full_name" optionValue="id" placeholder="Selecione..." filter fluid />
+                    <small class="p-error" v-if="submitted && !assignment.teacher">Obrigatório.</small>
                 </div>
 
                 <template #footer>
-                    <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="hideDialog" />
+                    <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="assignmentDialog = false" />
                     <Button label="Salvar" icon="pi pi-check" @click="saveAssignment" />
                 </template>
             </Dialog>
 
-            <Dialog v-model:visible="deleteDialog" header="Remover Atribuição" :modal="true" :style="{ width: '450px' }">
-                <div class="flex align-center justify-center">
-                    <i class="pi pi-exclamation-triangle mr-3" style="font-size: 2rem" />
-                    <span>Tem certeza que deseja remover esta aula?</span>
+            <Dialog v-model:visible="deleteAssignmentDialog" :style="{ width: '450px' }" header="Confirmar" :modal="true">
+                <div class="flex items-center justify-center">
+                    <i class="pi pi-exclamation-triangle mr-3 text-yellow-500" style="font-size: 2rem" />
+                    <span>Confirmar a exclusão?</span>
                 </div>
                 <template #footer>
-                    <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteDialog = false" />
-                    <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteAssignment" />
+                    <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteAssignmentDialog = false" />
+                    <Button label="Sim" icon="pi pi-check" class="p-button-danger" @click="deleteAssignment" />
                 </template>
             </Dialog>
         </div>

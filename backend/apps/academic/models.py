@@ -394,3 +394,35 @@ class ClassSchedule(models.Model):
 
     def __str__(self):
         return f"{self.get_day_of_week_display()} - {self.start_time} - {self.assignment.subject.name}"
+
+class AcademicHistory(models.Model):
+    STATUS_CHOICES = [
+        ('APPROVED', 'Aprovado'),
+        ('RETAINED', 'Reprovado/Retido'),
+        ('TRANSFERRED', 'Transferido'),
+        ('DROPOUT', 'Evadido/Desistente'),
+        ('IN_PROGRESS', 'Cursando (Atual)'),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='academic_history')
+    year = models.IntegerField("Ano Letivo")
+    
+    # Texto livre pois pode ser uma turma antiga que não existe mais no sistema
+    # ou uma turma de outra escola.
+    classroom_name = models.CharField("Turma/Série", max_length=100, help_text="Ex: 5º Ano B ou 3ª Série EM")
+    
+    school_name = models.CharField("Escola", max_length=200, default="Lumis School", help_text="Nome da escola onde cursou")
+    
+    status = models.CharField("Situação Final", max_length=20, choices=STATUS_CHOICES, default='APPROVED')
+    final_grade = models.CharField("Média Final", max_length=10, blank=True, null=True, help_text="Opcional")
+    
+    observation = models.TextField("Observações", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Registro de Histórico"
+        verbose_name_plural = "Histórico Acadêmico"
+        ordering = ['-year'] # Do mais recente para o mais antigo
+
+    def __str__(self):
+        return f"{self.student.name} - {self.year} - {self.classroom_name}"

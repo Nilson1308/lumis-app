@@ -2,6 +2,9 @@
 import { ref, watch } from 'vue';
 import api from '@/service/api';
 
+// IMPORTAÇÃO DA LINHA DO TEMPO
+import StudentHistoryManager from '@/components/StudentHistoryManager.vue';
+
 const props = defineProps({
     visible: Boolean,
     studentId: Number
@@ -42,9 +45,10 @@ const close = () => {
         v-model:visible="localVisible" 
         header="Ficha do Aluno" 
         :modal="true" 
-        :style="{ width: '700px' }" 
+        :style="{ width: '800px' }" 
         @hide="close"
         class="p-fluid"
+        maximizable
     >
         <div v-if="!loading">
             <div class="flex flex-col items-center mb-5 surface-50 p-4 border-round">
@@ -61,66 +65,71 @@ const close = () => {
                 <Tag :value="student.is_full_time ? 'Integral' : 'Parcial'" class="mt-2" />
             </div>
 
-            <div class="grid grid-cols-12 gap-8">
-                <div class="col-span-12 lg:col-span-6">
-                    <p class="font-bold mb-2 border-bottom-1 surface-border pb-1">Dados Pessoais</p>
-                    <div class="flex justify-between mb-2">
-                        <span class="text-500">Nascimento:</span>
-                        <span>{{ student.birth_date ? new Date(student.birth_date).toLocaleDateString('pt-BR') : 'N/A' }}</span>
-                    </div>
-                    <div class="flex justify-between mb-2">
-                        <span class="text-500">CPF:</span>
-                        <span>{{ student.cpf || 'Não inf.' }}</span>
-                    </div>
-                    <div class="flex justify-between mb-2">
-                        <span class="text-500">Turma/Período:</span>
-                        <span>{{ student.period === 'MORNING' ? 'Manhã' : 'Tarde' }}</span>
-                    </div>
-                </div>
-
-                <div class="col-span-12 lg:col-span-6">
-                    <p class="font-bold mb-2 border-bottom-1 surface-border pb-1">Saúde & Segurança</p>
-                    <div class="mb-2">
-                        <span class="text-500 block">Contato Emergência:</span>
-                        <span class="font-medium text-900">{{ student.emergency_contact || 'Não informado' }}</span>
-                    </div>
-                    <div v-if="student.allergies" class="mb-2">
-                        <span class="text-red-500 font-bold block">Alergias:</span>
-                        <span>{{ student.allergies }}</span>
-                    </div>
-                    <div v-if="student.medications" class="mb-2">
-                        <span class="text-blue-500 font-bold block">Medicamentos:</span>
-                        <span>{{ student.medications }}</span>
-                    </div>
-                </div>
-
-                <div class="col-span-12 mt-3" v-if="student.guardians_details && student.guardians_details.length">
-                     <p class="font-bold mb-2 border-bottom-1 surface-border pb-1">Responsáveis</p>
-                     <ul class="list-none p-0 m-0">
-                        <li v-for="g in student.guardians_details" :key="g.id" class="mb-3 p-2 surface-50 border-round">
-                            <div class="flex items-center gap-2 mb-1">
-                                <i class="pi pi-user text-primary"></i>
-                                <span class="font-bold text-900">{{ g.name }}</span>
+            <TabView>
+                <TabPanel header="Dados Gerais">
+                    <div class="grid grid-cols-12 gap-8">
+                        <div class="col-span-12 lg:col-span-6">
+                            <p class="font-bold mb-2 border-bottom-1 surface-border pb-1">Dados Pessoais</p>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-500">Nascimento:</span>
+                                <span>{{ student.birth_date ? new Date(student.birth_date).toLocaleDateString('pt-BR') : 'N/A' }}</span>
                             </div>
-                            
-                            <div class="flex flex-column ml-4 text-sm text-600 gap-1">
-                                <span v-if="g.phone">
-                                    <i class="pi pi-whatsapp text-green-500 mr-1 text-xs"></i> 
-                                    {{ g.phone }}
-                                </span>
-                                <span v-if="g.email">
-                                    <i class="pi pi-envelope text-500 mr-1 text-xs"></i> 
-                                    {{ g.email }}
-                                </span>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-500">CPF:</span>
+                                <span>{{ student.cpf || 'Não inf.' }}</span>
                             </div>
-                        </li>
-                     </ul>
-                </div>
-                
-                <div class="col-span-12 mt-3" v-else-if="student.guardians && student.guardians.length">
-                    <p class="text-sm text-500">Responsáveis vinculados (IDs: {{ student.guardians.join(', ') }}). Detalhes indisponíveis.</p>
-                </div>
-            </div>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-500">Turma/Período:</span>
+                                <span>{{ student.period === 'MORNING' ? 'Manhã' : 'Tarde' }}</span>
+                            </div>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-500">Endereço:</span>
+                                <span>{{ student.city }} - {{ student.state }}</span>
+                            </div>
+                        </div>
+
+                        <Divider class="col-span-12 lg:col-span-1" layout="vertical" />
+
+                        <div class="col-span-12 lg:col-span-5">
+                            <p class="font-bold mb-2 border-bottom-1 surface-border pb-1">Saúde & Segurança</p>
+                            <div class="mb-2">
+                                <span class="text-500 block">Contato Emergência:</span>
+                                <span class="font-medium text-900">{{ student.emergency_contact || 'Não informado' }}</span>
+                            </div>
+                            <div v-if="student.allergies" class="mb-2">
+                                <span class="text-red-500 font-bold block">Alergias:</span>
+                                <span>{{ student.allergies }}</span>
+                            </div>
+                            <div v-if="student.medications" class="mb-2">
+                                <span class="text-blue-500 font-bold block">Medicamentos:</span>
+                                <span>{{ student.medications }}</span>
+                            </div>
+                        </div>
+
+                        <div class="col-span-12 mt-3" v-if="student.guardians_details && student.guardians_details.length">
+                             <p class="font-bold mb-2 border-bottom-1 surface-border pb-1">Responsáveis</p>
+                             <div class="grid grid-cols-12 gap-3">
+                                <div v-for="g in student.guardians_details" :key="g.id" class="col-span-12 md:col-span-6 p-2 surface-50 border-round">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <i class="pi pi-user text-primary"></i>
+                                        <span class="font-bold text-900">{{ g.name }}</span>
+                                    </div>
+                                    <div class="flex flex-column ml-4 text-sm text-600 gap-1">
+                                        <span v-if="g.phone">
+                                            <i class="pi pi-whatsapp text-green-500 mr-1 text-xs"></i> 
+                                            {{ g.phone }}
+                                        </span>
+                                    </div>
+                                </div>
+                             </div>
+                        </div>
+                    </div>
+                </TabPanel>
+
+                <TabPanel header="Histórico Escolar">
+                     <StudentHistoryManager :studentId="student.id" :readonly="true" />
+                </TabPanel>
+            </TabView>
         </div>
         
         <div v-else class="flex justify-center p-4">

@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     Segment, ClassRoom, Subject, Guardian, Student, Enrollment,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent, ClassSchedule
+    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory
 )
 User = get_user_model()
 
@@ -283,3 +283,10 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                     "Esta atribuição (Matéria/Professor) não pertence a esta turma."
                 )
         return data
+
+class AcademicHistorySerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = AcademicHistory
+        fields = '__all__'

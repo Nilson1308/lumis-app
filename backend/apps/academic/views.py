@@ -15,7 +15,7 @@ User = get_user_model()
 from .models import (
     Segment, ClassRoom, Guardian, Student, Enrollment, Subject,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent, ClassSchedule
+    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory
 )
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
@@ -23,7 +23,8 @@ from .serializers import (
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
     GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
-    ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer, ClassScheduleSerializer
+    ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer, ClassScheduleSerializer,
+    AcademicHistorySerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 from apps.coordination.models import StudentReport
@@ -731,3 +732,48 @@ class ClassScheduleViewSet(viewsets.ModelViewSet):
     # Permite filtrar por turma: /api/schedules/?classroom=1
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     filterset_fields = ['classroom', 'day_of_week']
+
+class AcademicHistoryViewSet(viewsets.ModelViewSet):
+    queryset = AcademicHistory.objects.all().order_by('-year')
+    serializer_class = AcademicHistorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['student']
+
+    def list(self, request, *args, **kwargs):
+        """
+        Sobrescreve a listagem para mesclar o Histórico Gravado 
+        com a Matrícula Ativa (Enrollment) se solicitado.
+        """
+        response = super().list(request, *args, **kwargs)
+        
+        # Se estiver filtrando por aluno, vamos tentar injetar a matrícula atual visualmente
+        student_id = request.query_params.get('student')
+        if student_id:
+            # Pega matrículas ativas desse aluno
+            active_enrollments = Enrollment.objects.filter(student_id=student_id, active=True)
+            
+            for enroll in active_enrollments:
+                # Verifica se já não existe um histórico gravado para este ano (evita duplicata)
+                exists = self.get_queryset().filter(student_id=student_id, year=enroll.classroom.year).exists()
+                
+                if not exists:
+                    # Cria um objeto "fake" de histórico apenas para visualização
+                    current_data = {
+                        'id': f"curr_{enroll.id}", # ID falso
+                        'year': enroll.classroom.year,
+                        'classroom_name': f"{enroll.classroom.name} ({enroll.classroom.segment})",
+                        'school_name': 'Lumis School', # Escola atual
+                        'status': 'IN_PROGRESS',
+                        'status_display': 'Cursando (Atual)',
+                        'final_grade': '-',
+                        'observation': 'Matrícula Ativa no Sistema',
+                        'is_virtual': True # Flag para o front saber que é dados vivo
+                    }
+                    # Adiciona no topo da lista (já que é o ano atual)
+                    if isinstance(response.data, list):
+                         response.data.insert(0, current_data)
+                    elif 'results' in response.data:
+                         response.data['results'].insert(0, current_data)
+        
+        return response

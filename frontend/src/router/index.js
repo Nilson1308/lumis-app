@@ -97,12 +97,6 @@ const router = createRouter({
                     name: 'assignments',
                     component: () => import('@/views/pages/AssignmentList.vue')
                 },
-                {
-                    path: '/assignments',
-                    name: 'assignments',
-                    component: () => import('@/views/pages/TeacherAssignmentList.vue'),
-                    meta: { breadcrumb: 'Atribuição de Aulas' }
-                },
 
                 // --- PORTAL DO PROFESSOR ---
                 {
