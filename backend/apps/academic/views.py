@@ -42,7 +42,7 @@ class ClassRoomViewSet(viewsets.ModelViewSet):
     queryset = ClassRoom.objects.all()
     serializer_class = ClassRoomSerializer
     pagination_class = LargeResultsSetPagination
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     search_fields = ['name', 'year']
     ordering_fields = ['year', 'name']
