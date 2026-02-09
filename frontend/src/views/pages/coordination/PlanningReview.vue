@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
@@ -26,6 +26,14 @@ const filters = ref({
     classroom: null,
     subject: null,
     assignment: null
+});
+
+// Paginação
+const totalRecords = ref(0);
+const lazyParams = ref({
+    first: 0,
+    rows: 10,
+    page: 0
 });
 
 const statusOptions = ref([
@@ -64,13 +72,12 @@ const loadFilterOptions = async () => {
 const loadPlans = async () => {
     loading.value = true;
     try {
-        let query = 'lesson-plans/?';
-
-        // --- FILTRO DE SEGURANÇA ---
-        // Se quisermos ver apenas os "meus" planos para revisar, 
-        // o backend deve filtrar automaticamente pelo usuário logado se ele não for superuser.
-        // Mas podemos forçar um status inicial se quiser, ex: &status=SUBMITTED
+        // --- PAGINAÇÃO ---
+        const page = lazyParams.value.page + 1; // Django começa em 1
+        const pageSize = lazyParams.value.rows;
         
+        let query = `lesson-plans/?page=${page}&page_size=${pageSize}`;
+
         if (route.query.assignment) {
             query += `&assignment=${route.query.assignment}`;
         } else {
@@ -82,12 +89,8 @@ const loadPlans = async () => {
 
         const { data } = await api.get(query);
         
-        // --- FILTRO CLIENT-SIDE PROVISÓRIO ---
-        // Se o backend retornar tudo, filtramos aqui para mostrar apenas o que tem o ID do usuário atual em 'recipients'
-        // Mas o ideal é o backend já mandar filtrado.
-        // Vou assumir que o backend manda filtrado ou manda tudo e o coord vê tudo.
-        
-        plans.value = data.results || data;
+        plans.value = data.results;
+        totalRecords.value = data.count; // Total real do banco
     } catch (e) {
         console.error(e);
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados' });
@@ -96,15 +99,22 @@ const loadPlans = async () => {
     }
 };
 
+const onPage = (event) => {
+    lazyParams.value = event;
+    loadPlans();
+};
+
 const clearFilters = () => {
     filters.value = { status: null, teacher: null, classroom: null, subject: null };
+    lazyParams.value.first = 0;
+    lazyParams.value.page = 0;
     loadPlans();
 };
 
 // --- ABRIR MODAL DE REVISÃO ---
 const openReview = (plan) => {
     currentPlan.value = plan;
-    feedbackText.value = plan.coordinator_feedback || ''; // Carrega feedback anterior se houver
+    feedbackText.value = plan.coordinator_feedback || ''; 
     reviewDialog.value = true;
 };
 
@@ -122,7 +132,6 @@ const saveFeedback = async (status) => {
     }
 };
 
-// Helpers Visuais
 const getSeverity = (status) => {
     switch (status) {
         case 'APPROVED': return 'success';
@@ -181,7 +190,17 @@ const getStatusLabel = (status) => {
             </template>
         </Toolbar>
 
-        <DataTable :value="plans" :loading="loading" paginator :rows="10" responsiveLayout="scroll">
+        <DataTable 
+            :value="plans" 
+            :loading="loading" 
+            :paginator="true" 
+            :rows="10" 
+            :totalRecords="totalRecords"
+            :lazy="true"
+            :first="lazyParams.first"
+            @page="onPage"
+            responsiveLayout="scroll"
+        >
             <template #empty>Nenhum planejamento encontrado.</template>
             
             <Column field="start_date" header="Semana" sortable>
@@ -227,7 +246,7 @@ const getStatusLabel = (status) => {
             </Column>
         </DataTable>
 
-        <Dialog v-model:visible="reviewDialog" header="Revisão do Planejamento" :style="{width: '800px'}" :modal="true" maximizable>
+        <Dialog v-model:visible="reviewDialog" header="Revisão do Planejamento" :style="{width: '900px'}" :modal="true" maximizable>
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12 md:col-span-8">
                     <div class="mb-3">
@@ -237,12 +256,14 @@ const getStatusLabel = (status) => {
                     
                     <div class="mb-4">
                         <span class="text-sm text-gray-500 block mb-1">Desenvolvimento</span>
-                        <div class="surface-100 p-3 border-round" v-html="currentPlan.description || 'Sem descrição.'"></div>
+                        
+                        <div class="surface-100 p-3 border-round overflow-auto max-h-[500px]">
+                            <div v-html="currentPlan.description || 'Sem descrição.'" class="html-content"></div>
+                        </div>
                     </div>
 
                     <div v-if="(currentPlan.attachments && currentPlan.attachments.length) || currentPlan.attachment" class="mb-4">
                         <span class="text-sm text-gray-500 block mb-2">Arquivos Anexados</span>
-                        
                         <div v-if="currentPlan.attachments">
                             <div v-for="att in currentPlan.attachments" :key="att.id" class="flex items-center gap-2 mb-2 p-2 surface-50 border-round">
                                 <i class="pi pi-file text-primary"></i>
@@ -252,7 +273,6 @@ const getStatusLabel = (status) => {
                                 <span class="text-xs text-gray-500 ml-auto">{{ new Date(att.uploaded_at).toLocaleDateString() }}</span>
                             </div>
                         </div>
-                        
                         <div v-if="currentPlan.attachment" class="flex items-center gap-2 p-2 surface-50 border-round">
                              <i class="pi pi-file text-primary"></i>
                              <a :href="currentPlan.attachment" target="_blank" class="font-bold text-primary hover:underline">Arquivo Único (Antigo)</a>
@@ -267,11 +287,29 @@ const getStatusLabel = (status) => {
                     </div>
                     
                     <div class="flex flex-col gap-2">
-                        <Button label="Aprovar Plano" icon="pi pi-check" class="p-button-success w-full" @click="saveFeedback('APPROVED')" />
-                        <Button label="Solicitar Correção" icon="pi pi-refresh" class="p-button-warning w-full" @click="saveFeedback('RETURNED')" />
+                        <Button label="Aprovar Plano" icon="pi pi-check" class="p-button w-full" @click="saveFeedback('APPROVED')" />
+                        <Button label="Solicitar Correção" icon="pi pi-refresh" class="p-button p-button-outlined w-full" @click="saveFeedback('RETURNED')" />
                     </div>
                 </div>
             </div>
         </Dialog>
     </div>
 </template>
+
+<style>
+/* CSS para formatar tabelas dentro do v-html do editor */
+.html-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+}
+.html-content th, .html-content td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+.html-content th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+</style>

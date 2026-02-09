@@ -153,7 +153,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Attendance
-        fields = ['id', 'date', 'present', 'justified', 'student_name', 'justification_status']
+        fields = ['id', 'date', 'present', 'justified', 'student_name', 'justification_status', 'enrollment',]
 
     def get_justification_status(self, obj):
         last_request = obj.justification_request.last()

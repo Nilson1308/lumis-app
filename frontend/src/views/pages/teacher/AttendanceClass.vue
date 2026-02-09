@@ -19,6 +19,16 @@ const saving = ref(false);
 // Data da Chamada (Padrão: Hoje)
 const attendanceDate = ref(new Date());
 
+// Helper para formatar YYYY-MM-DD sem problemas de fuso
+const formatDateForAPI = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 // --- CARREGAR DADOS ---
 const loadClassData = async () => {
     loading.value = true;
@@ -32,14 +42,14 @@ const loadClassData = async () => {
         
         // 3. Prepara a lista base (assumindo Presença = True inicialmente)
         const initialStudents = resEnroll.data.results.map(s => ({
-            id: s.id, // ID da Matrícula
+            id: s.id, // ID da Matrícula (Enrollment)
             student_name: s.student_name,
             present: true // Padrão: Veio na aula
         }));
 
         students.value = initialStudents;
 
-        // 4. Verifica se JÁ teve chamada nesta data para carregar o que foi lançado
+        // 4. Verifica se JÁ teve chamada nesta data
         await checkExistingAttendance();
 
     } catch (error) {
@@ -53,28 +63,33 @@ const loadClassData = async () => {
 const checkExistingAttendance = async () => {
     if (!assignment.value) return;
     
-    // Formata data YYYY-MM-DD para API
-    const dateStr = attendanceDate.value.toISOString().split('T')[0];
+    // Mostra loading rápido na tabela para dar feedback visual
+    // (opcional, mas bom pra UX)
+    
+    const dateStr = formatDateForAPI(attendanceDate.value);
 
     try {
+        // Busca registros dessa matéria, nessa turma, nessa data
         const res = await api.get(`attendance/?subject=${assignment.value.subject}&date=${dateStr}&enrollment__classroom=${assignment.value.classroom}`);
         
         const existingRecords = res.data.results;
 
-        // Se tiver registros, atualiza o estado dos alunos na tela
+        // Atualiza o estado visual
+        students.value.forEach(student => {
+            // Tenta achar o registro de presença para este aluno (enrollment)
+            const record = existingRecords.find(r => r.enrollment === student.id);
+            
+            if (record) {
+                // Se achou registro, usa o valor do banco
+                student.present = record.present;
+            } else {
+                // Se não achou (ex: aluno novo ou dia sem chamada), assume Presente
+                student.present = true;
+            }
+        });
+
         if (existingRecords.length > 0) {
-            students.value.forEach(student => {
-                const record = existingRecords.find(r => r.enrollment === student.id);
-                if (record) {
-                    student.present = record.present;
-                } else {
-                    student.present = true; // Se não achou (aluno novo), assume presente
-                }
-            });
-            toast.add({ severity: 'info', summary: 'Edição', detail: 'Carregando chamada já realizada neste dia.', life: 3000 });
-        } else {
-            // Se não tem registro, reseta todo mundo para Presente
-            students.value.forEach(s => s.present = true);
+            toast.add({ severity: 'info', summary: 'Registro Encontrado', detail: 'Carregando chamada anterior.', life: 2000 });
         }
 
     } catch (e) {
@@ -91,9 +106,8 @@ watch(attendanceDate, () => {
 const saveAttendance = async () => {
     saving.value = true;
     try {
-        const dateStr = attendanceDate.value.toISOString().split('T')[0];
+        const dateStr = formatDateForAPI(attendanceDate.value);
         
-        // Monta o payload que o Backend espera
         const payload = {
             subject: assignment.value.subject,
             date: dateStr,
@@ -105,7 +119,10 @@ const saveAttendance = async () => {
 
         await api.post('attendance/bulk_save/', payload);
         
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Chamada realizada!', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Chamada salva!', life: 3000 });
+        
+        // Recarrega para garantir sincronia (opcional)
+        await checkExistingAttendance();
         
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar chamada.', life: 3000 });
@@ -115,7 +132,7 @@ const saveAttendance = async () => {
 };
 
 const goBack = () => {
-    router.go(-1); // Volta para tela anterior
+    router.go(-1);
 };
 
 onMounted(() => {
@@ -139,7 +156,7 @@ onMounted(() => {
 
                 <div class="flex flex-col md:flex-row items-center gap-3">
                     <label class="block font-bold">Data da Aula:</label>
-                    <Calendar v-model="attendanceDate" dateFormat="dd/mm/yy" :showIcon="true" fluid />
+                    <DatePicker v-model="attendanceDate" dateFormat="dd/mm/yy" showIcon fluid />
                     <Button label="Salvar Chamada" icon="pi pi-check" :loading="saving" @click="saveAttendance" />
                 </div>
             </div>
@@ -158,6 +175,7 @@ onMounted(() => {
                             onIcon="pi pi-check" 
                             offIcon="pi pi-times"
                             class="w-full sm:w-10rem"
+                            :class="{ 'p-button-danger': !slotProps.data.present, 'p-button-success': slotProps.data.present }"
                         />
                     </template>
                 </Column>
