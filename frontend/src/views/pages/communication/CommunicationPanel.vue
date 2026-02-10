@@ -124,8 +124,8 @@ const openMessage = async (msg) => {
     selectedMessage.value = msg;
     viewDialog.value = true;
 
-    // Se não leu ainda, marca como lido
-    if (!msg.is_read && !isCoordinator.value) {
+    // Se não leu ainda, marca como lido (independente de ser professor ou coordenação)
+    if (!msg.is_read) {
         try {
             await api.post(`announcements/${msg.id}/mark_as_read/`);
             msg.is_read = true; // Atualiza visualmente na hora

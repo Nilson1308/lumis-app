@@ -17,16 +17,27 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         ).distinct().order_by('-created_at')
 
     def perform_create(self, serializer):
-        # 1. Salva a mensagem
+        """
+        Criação de anúncio.
+        A relação ManyToMany `recipients` já usa a tabela intermediária
+        `AnnouncementReadStatus` (via `through=`). Quando salvamos o
+        `recipient_ids` pelo serializer, o Django cria automaticamente
+        os registros na tabela de through.
+
+        Antes, este método ainda criava manualmente um
+        `AnnouncementReadStatus` para cada destinatário, o que gerava
+        `IntegrityError` por violar o `unique_together (announcement, user)`.
+        """
+
+        # 1. Salva a mensagem com o remetente correto
         announcement = serializer.save(sender=self.request.user)
-        
-        # 2. Processa destinatários (lógica de envio em massa)
-        # O Frontend vai mandar uma lista de IDs de usuários em 'recipient_ids'
+
+        # 2. Se o front enviou `recipient_ids`, garantimos que o ManyToMany
+        # seja atualizado a partir deles (evita qualquer inconsistência).
         recipient_ids = self.request.data.get('recipient_ids', [])
-        
-        # Cria os registros de "Não Lido" para todos
-        for uid in recipient_ids:
-            AnnouncementReadStatus.objects.create(announcement=announcement, user_id=uid)
+        if recipient_ids:
+            # Isso cria (ou ajusta) os registros na tabela de through
+            announcement.recipients.set(recipient_ids)
 
     @action(detail=True, methods=['post'])
     def mark_as_read(self, request, pk=None):
