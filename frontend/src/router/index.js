@@ -167,6 +167,15 @@ const router = createRouter({
                     name: 'student-report-approval',
                     component: () => import('@/views/pages/coordination/StudentReportApproval.vue')
                 },
+                // --- COMUNICAÇÃO ---
+                {
+                    path: '/comunicados',
+                    name: 'communication',
+                    component: () => import('@/views/pages/communication/CommunicationPanel.vue'),
+                    meta: {
+                        breadcrumb: ['Comunicação', 'Mural de Avisos']
+                    }
+                },
             ]
         },
         

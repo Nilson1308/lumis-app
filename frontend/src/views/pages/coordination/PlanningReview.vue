@@ -19,6 +19,8 @@ const teachers = ref([]);
 const classrooms = ref([]);
 const subjects = ref([]);
 
+const unsubscribeDialog = ref(false);
+
 // Filtros Ativos
 const filters = ref({
     status: null,
@@ -145,6 +147,38 @@ const getSeverity = (status) => {
 const getStatusLabel = (status) => {
     const labels = { 'DRAFT': 'Rascunho', 'SUBMITTED': 'Enviado', 'APPROVED': 'Aprovado', 'RETURNED': 'Correção Solicitada' };
     return labels[status] || status;
+};
+
+const unsubscribePlan = async () => {
+    if (!confirm("Tem certeza que deseja sair da lista de destinatários deste plano? Você deixará de vê-lo.")) return;
+
+    try {
+        await api.post(`lesson-plans/${currentPlan.value.id}/unsubscribe/`);
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Você deixou de acompanhar este plano.' });
+        reviewDialog.value = false;
+        loadPlans(); // Recarrega a lista (o plano deve sumir)
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao processar solicitação.' });
+    }
+};
+
+// 1. Apenas abre o modal
+const confirmUnsubscribe = () => {
+    unsubscribeDialog.value = true;
+};
+
+// 2. Executa a ação real (Chamada no botão "Sim" do Dialog)
+const executeUnsubscribe = async () => {
+    try {
+        await api.post(`lesson-plans/${currentPlan.value.id}/unsubscribe/`);
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Você deixou de acompanhar este plano.' });
+        
+        unsubscribeDialog.value = false; // Fecha confirmação
+        reviewDialog.value = false;      // Fecha o modal do plano
+        loadPlans();                     // Atualiza a lista
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao processar solicitação.' });
+    }
 };
 </script>
 
@@ -289,9 +323,31 @@ const getStatusLabel = (status) => {
                     <div class="flex flex-col gap-2">
                         <Button label="Aprovar Plano" icon="pi pi-check" class="p-button w-full" @click="saveFeedback('APPROVED')" />
                         <Button label="Solicitar Correção" icon="pi pi-refresh" class="p-button p-button-outlined w-full" @click="saveFeedback('RETURNED')" />
+                        <Button 
+                            label="Deixar de Acompanhar" 
+                            icon="pi pi-sign-out" 
+                            class="p-button p-button-outlined w-full mt-4" 
+                            @click="confirmUnsubscribe"
+                            v-tooltip.top="'Remove você da lista de destinatários deste plano'"
+                        />
                     </div>
                 </div>
             </div>
+        </Dialog>
+
+        <Dialog v-model:visible="unsubscribeDialog" :style="{ width: '450px' }" header="Confirmar Saída" :modal="true">
+            <div class="flex items-center gap-4">
+                <i class="pi pi-exclamation-triangle text-yellow-500 text-4xl" />
+                <span class="line-height-3">
+                    Tem certeza que deseja <b>deixar de acompanhar</b> este planejamento?
+                    <br>
+                    <small class="text-gray-500">Ele deixará de aparecer na sua lista de pendências.</small>
+                </span>
+            </div>
+            <template #footer>
+                <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="unsubscribeDialog = false" />
+                <Button label="Sim, Sair" icon="pi pi-sign-out" class="p-button-warning" @click="executeUnsubscribe" autofocus />
+            </template>
         </Dialog>
     </div>
 </template>

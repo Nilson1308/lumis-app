@@ -50,6 +50,15 @@ watchEffect(() => {
         });
     }
 
+    if (authStore.isAdmin || authStore.isCoordinator  || authStore.isTeacher) {
+        newMenu.push({
+            label: 'Comunicação',
+            items: [
+                { label: 'Mural de Avisos', icon: 'pi pi-megaphone', to: { name: 'communication' } }
+            ]
+        });
+    }
+
     if (authStore.isCoordinator || authStore.isAdmin) {
         newMenu.push({
             label: 'Coordenação',

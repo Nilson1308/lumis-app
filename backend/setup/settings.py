@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'apps.core',
     'apps.academic',
     'apps.coordination',
+    'apps.communication',
 ]
 
 MIDDLEWARE = [

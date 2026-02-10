@@ -401,7 +401,13 @@ class GradeViewSet(viewsets.ModelViewSet):
 class AttendanceViewSet(viewsets.ModelViewSet):
     queryset = Attendance.objects.all().order_by('date')
     serializer_class = AttendanceSerializer
-    filterset_fields = ['enrollment', 'subject', 'date', 'period']
+    filterset_fields = [
+        'enrollment', 
+        'subject', 
+        'date', 
+        'period',
+        'enrollment__classroom',  # <-- adicionar isso
+    ]
 
     @action(detail=False, methods=['post'])
     def bulk_save(self, request):
@@ -596,6 +602,18 @@ class LessonPlanViewSet(viewsets.ModelViewSet):
                 file=f,
                 name=f.name # Salva o nome original
             )
+
+    @action(detail=True, methods=['post'])
+    def unsubscribe(self, request, pk=None):
+        """Permite que um coordenador se remova da lista de destinatários."""
+        plan = self.get_object()
+        user = request.user
+        
+        if user in plan.recipients.all():
+            plan.recipients.remove(user)
+            return Response({'status': 'unsubscribed', 'message': 'Você foi removido da lista de destinatários.'})
+        
+        return Response({'status': 'ignored', 'message': 'Você não estava na lista.'}, status=200)
 
 class CoordinatorViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = SimpleUserSerializer
