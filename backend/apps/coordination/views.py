@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import WeeklyReport, ClassObservation, MeetingMinute, StudentReport
 from .serializers import WeeklyReportSerializer, ClassObservationSerializer, MeetingMinuteSerializer, StudentReportSerializer
 
@@ -8,10 +9,34 @@ class WeeklyReportViewSet(viewsets.ModelViewSet):
     queryset = WeeklyReport.objects.all().order_by('-start_date')
     serializer_class = WeeklyReportSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser, JSONParser)  # Permite upload de arquivos
     filterset_fields = ['author', 'start_date']
 
     # Auto-atribui o autor ao criar
     def perform_create(self, serializer):
+        # Debug: verificar dados recebidos
+        print("=== DEBUG: perform_create ===")
+        print("request.data:", self.request.data)
+        print("request.data type:", type(self.request.data))
+        
+        # Validação adicional de segurança: garante que recipient_ids foi enviado
+        # Tenta getlist primeiro (FormData), depois get normal (JSON)
+        recipient_ids = self.request.data.getlist('recipient_ids') if hasattr(self.request.data, 'getlist') else self.request.data.get('recipient_ids', [])
+        
+        print("recipient_ids recebido:", recipient_ids)
+        print("recipient_ids type:", type(recipient_ids))
+        print("recipient_ids length:", len(recipient_ids) if recipient_ids else 0)
+        
+        # Se for string única, converte para lista
+        if isinstance(recipient_ids, str):
+            recipient_ids = [recipient_ids]
+        
+        if not recipient_ids or len(recipient_ids) == 0:
+            print("DEBUG: BLOQUEANDO - Sem recipient_ids")
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'recipient_ids': ['É obrigatório selecionar pelo menos um coordenador para envio.']})
+        
+        print("DEBUG: Validação passou, salvando...")
         serializer.save(author=self.request.user)
 
 class ClassObservationViewSet(viewsets.ModelViewSet):

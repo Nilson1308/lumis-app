@@ -71,6 +71,7 @@ class Student(models.Model):
     # Identificação Básica
     name = models.CharField("Nome Completo", max_length=150)
     registration_number = models.CharField("Matrícula", max_length=20, unique=True)
+    ra = models.CharField("RA (Registro do Aluno)", max_length=20, blank=True, null=True, help_text="Registro Acadêmico do aluno")
     photo = models.ImageField(upload_to='students/', blank=True, null=True)
     
     # Identificação Civil (Novos Campos)

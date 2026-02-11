@@ -176,9 +176,10 @@ class LessonPlanSerializer(serializers.ModelSerializer):
 
     # 1. ATIVAR RECIPIENTS (Permite escrever e ler)
     recipients = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), 
+        queryset=User.objects.filter(groups__name='Coordenacao'),
         many=True, 
-        required=False
+        required=False,
+        help_text="Selecione pelo menos um coordenador"
     )
 
     # 2. ATIVAR MÚLTIPLOS ANEXOS (Leitura)
@@ -193,6 +194,42 @@ class LessonPlanSerializer(serializers.ModelSerializer):
             'coordinator_note', 'teacher_name', 'subject_name', 
             'classroom_name', 'created_at'
         ]
+    
+    def validate_start_date(self, value):
+        """Permite criar planejamentos semanários futuros"""
+        # Removida validação que bloqueava datas futuras
+        return value
+    
+    def validate_end_date(self, value):
+        """Permite criar planejamentos semanários futuros"""
+        # Removida validação que bloqueava datas futuras
+        return value
+    
+    def validate(self, data):
+        """Validações adicionais"""
+        recipients = data.get('recipients', [])
+        status = data.get('status', self.instance.status if self.instance else 'DRAFT')
+        start_date = data.get('start_date')
+        end_date = data.get('end_date')
+        
+        # Validação: Coordenadores obrigatórios quando status é SUBMITTED
+        if status == 'SUBMITTED':
+            # Se está editando e não veio recipients no data, pega do instance
+            if not recipients and self.instance:
+                recipients = list(self.instance.recipients.all())
+            
+            if not recipients or len(recipients) == 0:
+                raise serializers.ValidationError({
+                    'recipients': ['É obrigatório selecionar pelo menos um coordenador para enviar o planejamento.']
+                })
+        
+        # Validação: end_date deve ser maior ou igual a start_date
+        if start_date and end_date and end_date < start_date:
+            raise serializers.ValidationError({
+                'end_date': ['A data de fim deve ser maior ou igual à data de início.']
+            })
+        
+        return data
 
 class SimpleUserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
@@ -266,6 +303,12 @@ class TaughtContentSerializer(serializers.ModelSerializer):
     class Meta:
         model = TaughtContent
         fields = ['id', 'assignment', 'date', 'content', 'homework', 'created_at', 'subject_name', 'classroom_name']
+    
+    def validate_date(self, value):
+        """Permite registrar aulas em qualquer data (passado, presente ou futuro)"""
+        # Removida validação que bloqueava datas futuras
+        # Professores podem planejar e registrar aulas futuras
+        return value
 
 class SchoolEventSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='classroom.name', read_only=True)

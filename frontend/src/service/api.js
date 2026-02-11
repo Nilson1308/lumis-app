@@ -31,10 +31,14 @@ api.interceptors.response.use(
     (error) => {
         if (error.response && error.response.status === 401) {
             // Se der erro de auth, desloga o usuário forçado
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            // Opcional: Redirecionar para login via window.location ou router
-            // window.location.href = '/login'; 
+            localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
+            // Remove token do header
+            delete api.defaults.headers.common['Authorization'];
+            // Força redirecionamento para login
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
         }
         return Promise.reject(error);
     }

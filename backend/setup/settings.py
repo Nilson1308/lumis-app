@@ -169,8 +169,8 @@ REST_FRAMEWORK = {
 
 # Configuração do JWT (Validade do Token)
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60), # Token dura 1 hora
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),    # Refresh dura 1 dia
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),  # Token dura 8 horas (aumentado de 1 hora)
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # Refresh dura 7 dias (aumentado de 1 dia)
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
     'SIGNING_KEY': SECRET_KEY,

@@ -81,6 +81,7 @@ watchEffect(() => {
             items: [
                 { label: 'Minhas Turmas', icon: 'pi pi-fw pi-book', to: { name: 'my-classes' } },
                 { label: 'Planejamento Semanal', icon: 'pi pi-fw pi-calendar-plus', to: { name: 'lesson-plans' } },
+                { label: 'Relatórios Semanais', icon: 'pi pi-fw pi-list', to: { name: 'weekly-reports' } },
                 { label: 'Relatórios Alunos', icon: 'pi pi-fw pi-list', to: { name: 'student-report' } },
             ]
         });

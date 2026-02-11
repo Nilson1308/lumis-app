@@ -125,31 +125,95 @@ const onFileSelect = (event) => {
     const files = event.files;
     const maxFileSize = 2 * 1024 * 1024; // 2 MB
     const maxFileCount = 5;
+    
+    // Extensões permitidas (em minúsculas para comparação)
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png'];
+    const allowedMimeTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'image/jpeg',
+        'image/jpg',
+        'image/png'
+    ];
 
-    // 1. Validação de Quantidade
-    if (newAttachments.value.length + files.length > maxFileCount) {
-        toast.add({ severity: 'error', summary: 'Limite Excedido', detail: `Máximo de ${maxFileCount} arquivos permitidos.`, life: 4000 });
-        // Limpa a seleção do componente visual
-        if (fileUploadRef.value) fileUploadRef.value.clear();
+    if (!files || files.length === 0) {
         return;
     }
 
-    // 2. Validação de Tamanho (Arquivo por Arquivo)
+    // 1. Validação de Quantidade
+    if (newAttachments.value.length + files.length > maxFileCount) {
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Limite de Arquivos Excedido', 
+            detail: `Você pode anexar no máximo ${maxFileCount} arquivos. Você já tem ${newAttachments.value.length} arquivo(s) selecionado(s).`, 
+            life: 6000 
+        });
+        if (fileUploadRef.value && fileUploadRef.value.clear) {
+            fileUploadRef.value.clear();
+        }
+        return;
+    }
+
+    // 2. Validação de Tamanho e Extensão (Arquivo por Arquivo)
+    const invalidFiles = [];
+    
     for (let file of files) {
+        let fileError = null;
+        
+        // Validação de tamanho
         if (file.size > maxFileSize) {
-            toast.add({ 
-                severity: 'error', 
-                summary: 'Arquivo muito grande', 
-                detail: `O arquivo "${file.name}" excede 2MB.`, 
-                life: 5000 
-            });
-            if (fileUploadRef.value) fileUploadRef.value.clear();
-            return;
+            const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+            fileError = {
+                name: file.name,
+                reason: 'size',
+                message: `O arquivo "${file.name}" excede o limite de 2MB. Tamanho atual: ${fileSizeMB} MB`
+            };
+        } else {
+            // Validação de extensão
+            const fileName = file.name.toLowerCase();
+            const fileExtension = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+            const isValidExtension = fileExtension && allowedExtensions.includes(fileExtension);
+            const isValidMimeType = file.type && allowedMimeTypes.includes(file.type);
+            
+            if (!isValidExtension && !isValidMimeType) {
+                fileError = {
+                    name: file.name,
+                    reason: 'extension',
+                    message: `O arquivo "${file.name}" não é permitido. Extensões aceitas: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG`
+                };
+            }
+        }
+        
+        if (fileError) {
+            invalidFiles.push(fileError);
         }
     }
 
+    // Se houver arquivos inválidos, mostra erro e não adiciona nenhum
+    if (invalidFiles.length > 0) {
+        // Mostra erro para cada arquivo inválido
+        invalidFiles.forEach(fileError => {
+            toast.add({ 
+                severity: 'error', 
+                summary: fileError.reason === 'size' ? 'Arquivo muito grande' : 'Tipo de arquivo não permitido', 
+                detail: fileError.message, 
+                life: 6000 
+            });
+        });
+        
+        // Limpa o componente FileUpload
+        if (fileUploadRef.value && fileUploadRef.value.clear) {
+            fileUploadRef.value.clear();
+        }
+        return;
+    }
+
     // Se passou nas validações, adiciona à lista temporária
-    // Usamos spread para manter os anteriores se o usuário adicionar em lotes
     files.forEach(f => {
         // Evita duplicatas de nome na lista de novos
         if (!newAttachments.value.some(existing => existing.name === f.name)) {
@@ -158,7 +222,57 @@ const onFileSelect = (event) => {
     });
     
     // Limpa o input visual para permitir selecionar mais depois
-    if (fileUploadRef.value) fileUploadRef.value.clear();
+    if (fileUploadRef.value && fileUploadRef.value.clear) {
+        fileUploadRef.value.clear();
+    }
+    
+    // Feedback positivo quando arquivos são aceitos
+    if (files.length > 0) {
+        toast.add({ 
+            severity: 'success', 
+            summary: 'Arquivo(s) adicionado(s)', 
+            detail: `${files.length} arquivo(s) adicionado(s) com sucesso.`, 
+            life: 3000 
+        });
+    }
+};
+
+// Handler para erros do FileUpload (quando o componente detecta problema antes do nosso handler)
+const onFileError = (event) => {
+    console.error('Erro no FileUpload:', event);
+    
+    if (event.files && event.files.length > 0) {
+        const file = event.files[0];
+        const maxFileSize = 2 * 1024 * 1024; // 2 MB
+        
+        if (file.size > maxFileSize) {
+            toast.add({ 
+                severity: 'error', 
+                summary: 'Arquivo muito grande', 
+                detail: `O arquivo "${file.name}" excede o limite de 2MB. Tamanho: ${(file.size / 1024 / 1024).toFixed(2)} MB`, 
+                life: 6000 
+            });
+        } else {
+            toast.add({ 
+                severity: 'error', 
+                summary: 'Erro ao selecionar arquivo', 
+                detail: event.error || `Erro ao processar o arquivo "${file.name}". Verifique se o tipo de arquivo é permitido.`, 
+                life: 5000 
+            });
+        }
+    } else {
+        toast.add({ 
+            severity: 'error', 
+            summary: 'Erro ao selecionar arquivo', 
+            detail: event.error || 'Erro desconhecido ao selecionar arquivo.', 
+            life: 5000 
+        });
+    }
+    
+    // Limpa o componente
+    if (fileUploadRef.value && fileUploadRef.value.clear) {
+        fileUploadRef.value.clear();
+    }
 };
 
 const removeNewAttachment = (index) => {
@@ -168,9 +282,50 @@ const removeNewAttachment = (index) => {
 const savePlan = async (forceSubmit = false) => {
     submitted.value = true;
 
+    // Validações básicas
     if (!plan.value.assignment || !plan.value.topic || !plan.value.start_date) {
         toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Turma, Data e Tópico.', life: 3000 });
+        submitted.value = false;
         return;
+    }
+
+    // Validação CRÍTICA: Se for enviar definitivo (SUBMITTED), coordenador é obrigatório
+    if (forceSubmit) {
+        let recipients = plan.value.recipients;
+        
+        // Garante que seja array
+        if (!Array.isArray(recipients)) {
+            recipients = [];
+        }
+        
+        // Remove valores nulos/undefined
+        recipients = recipients.filter(id => id != null && id !== undefined && id !== '');
+        
+        if (!recipients || recipients.length === 0) {
+            toast.add({ 
+                severity: 'error', 
+                summary: 'Campo Obrigatório', 
+                detail: 'É obrigatório selecionar pelo menos um coordenador para enviar o planejamento definitivo.', 
+                life: 5000 
+            });
+            submitted.value = false;
+            return; // IMPEDE o envio
+        }
+    }
+    
+    // Validação adicional de arquivos antes de enviar
+    const maxFileSize = 2 * 1024 * 1024; // 2 MB
+    for (let file of newAttachments.value) {
+        if (file.size > maxFileSize) {
+            toast.add({ 
+                severity: 'error', 
+                summary: 'Arquivo muito grande', 
+                detail: `O arquivo "${file.name}" excede 2MB. Tamanho: ${(file.size / 1024 / 1024).toFixed(2)} MB`, 
+                life: 5000 
+            });
+            submitted.value = false;
+            return; // IMPEDE o envio
+        }
     }
 
     const formData = new FormData();
@@ -217,9 +372,43 @@ const savePlan = async (forceSubmit = false) => {
         planDialog.value = false;
         loadData();
     } catch (error) {
-        console.error(error);
-        const msg = error.response?.data?.detail || 'Erro ao salvar. Verifique o tamanho dos arquivos.';
-        toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 4000 });
+        console.error('Erro ao salvar planejamento:', error);
+        
+        // Extrai mensagem de erro específica do backend
+        let errorMessage = 'Erro ao salvar planejamento.';
+        if (error.response && error.response.data) {
+            // Tenta pegar mensagem de erro do Django REST Framework
+            if (error.response.data.detail) {
+                errorMessage = error.response.data.detail;
+            } else if (error.response.data.error) {
+                errorMessage = error.response.data.error;
+            } else if (error.response.data.message) {
+                errorMessage = error.response.data.message;
+            } else if (typeof error.response.data === 'string') {
+                errorMessage = error.response.data;
+            } else if (Array.isArray(error.response.data)) {
+                errorMessage = error.response.data.join(', ');
+            } else if (error.response.data.non_field_errors) {
+                errorMessage = error.response.data.non_field_errors.join(', ');
+            } else if (error.response.data.recipients) {
+                // Erro específico de recipients
+                const recipientsError = error.response.data.recipients;
+                errorMessage = Array.isArray(recipientsError) ? recipientsError[0] : recipientsError;
+            } else {
+                // Tenta pegar primeiro erro de campo encontrado
+                const firstError = Object.values(error.response.data)[0];
+                if (Array.isArray(firstError)) {
+                    errorMessage = firstError[0];
+                } else if (typeof firstError === 'string') {
+                    errorMessage = firstError;
+                }
+            }
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        toast.add({ severity: 'error', summary: 'Erro ao Salvar', detail: errorMessage, life: 5000 });
+        submitted.value = false;
     }
 };
 
@@ -347,18 +536,22 @@ onMounted(() => { loadData(); });
                 
                 <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-12">
-                        <label class="block font-bold mb-3">Enviar para (Coordenadores)</label>
+                        <label class="block font-bold mb-3">Enviar para (Coordenadores) <span class="text-red-500" v-if="plan.status === 'SUBMITTED' || !plan.id">*</span></label>
                         <MultiSelect 
                             v-model="plan.recipients" 
                             :options="coordinators" 
                             optionLabel="label" 
                             optionValue="id" 
-                            placeholder="Selecione..." 
+                            placeholder="Selecione pelo menos um coordenador" 
                             display="chip"
                             filter
+                            :class="{ 'p-invalid': submitted && (plan.status === 'SUBMITTED' || !plan.id) && (!plan.recipients || plan.recipients.length === 0) }"
                             fluid
                         />
-                        <small class="text-gray-500">Selecione quem deve receber este planejamento.</small>
+                        <small class="p-error" v-if="submitted && (plan.status === 'SUBMITTED' || !plan.id) && (!plan.recipients || plan.recipients.length === 0)">
+                            Selecione pelo menos um coordenador para enviar o planejamento.
+                        </small>
+                        <small class="text-gray-500" v-else>Selecione quem deve receber este planejamento.</small>
                     </div>
 
                     <div class="col-span-12 xl:col-span-6">
@@ -393,6 +586,7 @@ onMounted(() => { loadData(); });
 
                     <div class="col-span-12 xl:col-span-12">
                         <label class="block font-bold mb-3">Anexar Materiais (Máx 5 arquivos de 2MB)</label>
+                        <small class="text-gray-500 block mb-2">Extensões permitidas: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG</small>
                         
                         <FileUpload 
                             ref="fileUploadRef"
@@ -402,7 +596,8 @@ onMounted(() => { loadData(); });
                             :maxFileSize="2097152" 
                             :fileLimit="5"
                             multiple
-                            @select="onFileSelect" 
+                            @select="onFileSelect"
+                            @error="onFileError"
                             :auto="false" 
                             chooseLabel="Escolher Arquivos" 
                             class="w-full"

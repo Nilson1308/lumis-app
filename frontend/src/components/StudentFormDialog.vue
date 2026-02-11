@@ -22,7 +22,7 @@ const photoFile = ref(null);
 
 // Objeto Aluno (Modelo vazio inicial)
 const student = ref({
-    name: '', registration_number: '', birth_date: null, gender: null,
+    name: '', registration_number: '', ra: '', birth_date: null, gender: null,
     cpf: '', rg: '', nationality: 'Brasileira',
     zip_code: '', street: '', number: '', complement: '', neighborhood: '', city: 'Mogi das Cruzes', state: 'SP',
     period: 'AFTERNOON', is_full_time: false, meals: 'NONE',
@@ -78,7 +78,7 @@ const loadAuxiliaryData = async () => {
 
 const resetForm = () => {
     student.value = {
-        name: '', registration_number: '', nationality: 'Brasileira', city: 'Mogi das Cruzes', state: 'SP',
+        name: '', registration_number: '', ra: '', nationality: 'Brasileira', city: 'Mogi das Cruzes', state: 'SP',
         period: 'AFTERNOON', is_full_time: false, meals: 'NONE',
         guardians: [], extra_activities: [], photo_preview: null
     };
@@ -147,7 +147,7 @@ const saveStudent = async () => {
     const formData = new FormData();
     // Campos Simples
     const fields = [
-        'name', 'registration_number', 'birth_date', 'gender', 'cpf', 'rg', 'nationality',
+        'name', 'registration_number', 'ra', 'birth_date', 'gender', 'cpf', 'rg', 'nationality',
         'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
         'period', 'meals', 'is_full_time', 'allergies', 'medications', 'emergency_contact'
     ];
@@ -232,11 +232,15 @@ const saveStudent = async () => {
                             <small class="p-error" v-if="submitted && !student.name">Obrigatório.</small>
                             
                             <div class="grid grid-cols-12 gap-4 mt-3">
-                                <div class="col-span-12 xl:col-span-6">
+                                <div class="col-span-12 xl:col-span-4">
                                     <label class="block font-bold mb-3">Matrícula</label>
                                     <InputText v-model.trim="student.registration_number" :class="{ 'p-invalid': submitted && !student.registration_number }" fluid />
                                 </div>
-                                <div class="col-span-12 xl:col-span-6">
+                                <div class="col-span-12 xl:col-span-4">
+                                    <label class="block font-bold mb-3">RA (Registro do Aluno)</label>
+                                    <InputText v-model.trim="student.ra" placeholder="Opcional" fluid />
+                                </div>
+                                <div class="col-span-12 xl:col-span-4">
                                     <label class="block font-bold mb-3">Data de Nascimento</label>
                                     <DatePicker v-model="student.birth_date" dateFormat="dd/mm/yy" showIcon fluid />
                                 </div>

@@ -9,6 +9,20 @@ class WeeklyReport(models.Model):
     end_date = models.DateField("Fim da Semana")
     description = models.TextField("Resumo das Atividades")
     pending_issues = models.TextField("Pendências / Pontos de Atenção", blank=True)
+    attachment = models.FileField(
+        "Anexo", 
+        upload_to='weekly_reports/%Y/%m/', 
+        null=True, 
+        blank=True,
+        help_text="Arquivo anexo ao relatório (máximo 2MB)"
+    )
+    # Coordenadores que receberão o relatório
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name='received_weekly_reports',
+        verbose_name="Enviar para Coordenadores",
+        help_text="Selecione pelo menos um coordenador"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
