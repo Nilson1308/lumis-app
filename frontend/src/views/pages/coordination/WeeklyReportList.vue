@@ -237,37 +237,36 @@ const saveReport = async () => {
         }
         fetchReports();
     } catch (error) {
-            console.error('Erro ao salvar relatório:', error);
-            // Extrai mensagem de erro específica do backend
-            let errorMessage = 'Erro ao salvar relatório.';
-            if (error.response && error.response.data) {
-                // Tenta pegar mensagem de erro do Django REST Framework
-                if (error.response.data.detail) {
-                    errorMessage = error.response.data.detail;
-                } else if (error.response.data.error) {
-                    errorMessage = error.response.data.error;
-                } else if (error.response.data.message) {
-                    errorMessage = error.response.data.message;
-                } else if (typeof error.response.data === 'string') {
-                    errorMessage = error.response.data;
-                } else if (Array.isArray(error.response.data)) {
-                    errorMessage = error.response.data.join(', ');
-                } else if (error.response.data.non_field_errors) {
-                    errorMessage = error.response.data.non_field_errors.join(', ');
-                } else {
-                    // Tenta pegar primeiro erro de campo encontrado
-                    const firstError = Object.values(error.response.data)[0];
-                    if (Array.isArray(firstError)) {
-                        errorMessage = firstError[0];
-                    } else if (typeof firstError === 'string') {
-                        errorMessage = firstError;
-                    }
+        console.error('Erro ao salvar relatório:', error);
+        // Extrai mensagem de erro específica do backend
+        let errorMessage = 'Erro ao salvar relatório.';
+        if (error.response && error.response.data) {
+            // Tenta pegar mensagem de erro do Django REST Framework
+            if (error.response.data.detail) {
+                errorMessage = error.response.data.detail;
+            } else if (error.response.data.error) {
+                errorMessage = error.response.data.error;
+            } else if (error.response.data.message) {
+                errorMessage = error.response.data.message;
+            } else if (typeof error.response.data === 'string') {
+                errorMessage = error.response.data;
+            } else if (Array.isArray(error.response.data)) {
+                errorMessage = error.response.data.join(', ');
+            } else if (error.response.data.non_field_errors) {
+                errorMessage = error.response.data.non_field_errors.join(', ');
+            } else {
+                // Tenta pegar primeiro erro de campo encontrado
+                const firstError = Object.values(error.response.data)[0];
+                if (Array.isArray(firstError)) {
+                    errorMessage = firstError[0];
+                } else if (typeof firstError === 'string') {
+                    errorMessage = firstError;
                 }
-            } else if (error.message) {
-                errorMessage = error.message;
             }
-            toast.add({ severity: 'error', summary: 'Erro ao Salvar', detail: errorMessage, life: 5000 });
+        } else if (error.message) {
+            errorMessage = error.message;
         }
+        toast.add({ severity: 'error', summary: 'Erro ao Salvar', detail: errorMessage, life: 5000 });
     }
 };
 
