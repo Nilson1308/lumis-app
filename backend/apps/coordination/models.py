@@ -59,6 +59,7 @@ class MeetingMinute(models.Model):
     title = models.CharField("Título / Pauta", max_length=200)
     date = models.DateField("Data da Reunião")
     participants = models.TextField("Participantes") # Lista de nomes em texto
+    guests = models.TextField("Convidados", blank=True, help_text="Convidados externos à instituição")
     content = models.TextField("Conteúdo / Decisões")
     next_steps = models.TextField("Próximos Passos / Tarefas", blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)

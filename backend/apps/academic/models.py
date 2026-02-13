@@ -56,16 +56,29 @@ class Guardian(models.Model):
         return self.name
 
 class ExtraActivity(models.Model):
+    """Atividades extracurriculares. Podem ser incluídas no período integral ou pagas separadamente."""
+    ACTIVITY_TYPE_CHOICES = [
+        ('INCLUDED', 'Incluída no Período Integral'),
+        ('PAID', 'Atividade Paga'),
+    ]
     name = models.CharField("Nome da Atividade", max_length=100)
     description = models.TextField("Descrição", blank=True)
     price = models.DecimalField("Valor Mensal", max_digits=10, decimal_places=2, default=0.00)
-    
+    activity_type = models.CharField(
+        "Tipo",
+        max_length=20,
+        choices=ACTIVITY_TYPE_CHOICES,
+        default='PAID',
+        help_text="INCLUDED = incluída no pacote integral | PAID = cobrança separada"
+    )
+
     def __str__(self):
         return self.name
 
     class Meta:
         verbose_name = "Atividade Extra"
         verbose_name_plural = "Atividades Extras"
+
 
 class Student(models.Model):
     # Identificação Básica
@@ -107,9 +120,6 @@ class Student(models.Model):
     ]
     meals = models.CharField("Plano de Refeições", max_length=20, choices=MEALS_CHOICES, default='NONE')
 
-    # atividades extra
-    extra_activities = models.ManyToManyField(ExtraActivity, blank=True, verbose_name="Atividades Extras")
-
     # Dados de Saúde/Emergência
     allergies = models.TextField("Alergias", blank=True)
     medications = models.TextField("Uso Contínuo de Medicamentos", blank=True)
@@ -131,6 +141,53 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.registration_number})"
+
+
+class ExtraActivityEnrollment(models.Model):
+    """Matrícula do aluno em uma atividade extracurricular."""
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE, related_name='extra_activity_enrollments',
+        verbose_name="Aluno"
+    )
+    activity = models.ForeignKey(
+        ExtraActivity, on_delete=models.CASCADE, related_name='enrollments',
+        verbose_name="Atividade"
+    )
+    start_date = models.DateField("Data de Início da Matrícula")
+    end_date = models.DateField("Data de Término", null=True, blank=True)
+    active = models.BooleanField("Ativo", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Matrícula em Atividade Extra"
+        verbose_name_plural = "Matrículas em Atividades Extras"
+        ordering = ['-start_date']
+        unique_together = ['student', 'activity']
+
+    def __str__(self):
+        return f"{self.student.name} - {self.activity.name} (desde {self.start_date})"
+
+
+class ExtraActivityAttendance(models.Model):
+    """Controle de presença nas atividades extracurriculares."""
+    enrollment = models.ForeignKey(
+        ExtraActivityEnrollment, on_delete=models.CASCADE, related_name='attendances',
+        verbose_name="Matrícula"
+    )
+    date = models.DateField("Data")
+    present = models.BooleanField("Presente", default=True)
+    observation = models.TextField("Observação", blank=True)
+
+    class Meta:
+        verbose_name = "Presença em Atividade Extra"
+        verbose_name_plural = "Presenças em Atividades Extras"
+        ordering = ['-date']
+        unique_together = ['enrollment', 'date']
+
+    def __str__(self):
+        status = "Presente" if self.present else "Ausente"
+        return f"{self.enrollment.student.name} - {self.enrollment.activity.name} - {self.date}: {status}"
+
 
 class Enrollment(models.Model):
     """Vincula o Aluno a uma Turma"""
@@ -165,6 +222,65 @@ class TeacherAssignment(models.Model):
     def __str__(self):
         return f"{self.teacher} - {self.subject} ({self.classroom})"
 
+class ContraturnoClassroom(models.Model):
+    """Vincula uma turma ao seu contraturno e ao professor responsável pelo controle de frequência."""
+    classroom = models.ForeignKey(
+        ClassRoom, 
+        on_delete=models.CASCADE, 
+        related_name='contraturnos',
+        verbose_name="Turma Principal"
+    )
+    contraturno_period = models.CharField(
+        "Período do Contraturno",
+        max_length=20,
+        choices=Student.PERIOD_CHOICES,
+        help_text="Período oposto ao período principal da turma"
+    )
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='contraturno_responsibilities',
+        verbose_name="Professor Responsável",
+        limit_choices_to={'groups__name': 'Professores'},
+        help_text="Professor responsável pelo controle de frequência do contraturno"
+    )
+    active = models.BooleanField("Ativo", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Contraturno de Turma"
+        verbose_name_plural = "Contraturnos de Turmas"
+        unique_together = ('classroom', 'contraturno_period')
+        ordering = ['classroom__name']
+
+    def __str__(self):
+        period_display = dict(Student.PERIOD_CHOICES).get(self.contraturno_period, self.contraturno_period)
+        return f"{self.classroom.name} - Contraturno {period_display} ({self.teacher.get_full_name() or self.teacher.username})"
+
+class ContraturnoAttendance(models.Model):
+    """Controle de frequência do contraturno para alunos de período integral."""
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='contraturno_attendances',
+        verbose_name="Matrícula"
+    )
+    date = models.DateField("Data")
+    present = models.BooleanField("Presente", default=True)
+    justified = models.BooleanField("Falta Justificada", default=False)
+    observation = models.TextField("Observação", blank=True)
+
+    class Meta:
+        verbose_name = "Frequência do Contraturno"
+        verbose_name_plural = "Frequências do Contraturno"
+        unique_together = ('enrollment', 'date')
+        ordering = ['-date']
+
+    def __str__(self):
+        status = "Presente" if self.present else "Faltou"
+        return f"{self.date} - {self.enrollment.student.name}: {status}"
+
 class AcademicPeriod(models.Model):
     name = models.CharField("Nome", max_length=20) # Ex: 1º Bimestre
     start_date = models.DateField("Início")
@@ -178,6 +294,58 @@ class AcademicPeriod(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        """Ativa automaticamente o período se a data atual estiver dentro do intervalo"""
+        from django.utils import timezone
+        
+        today = timezone.now().date()
+        
+        # Se este período contém a data de hoje, ativa ele e desativa os outros
+        if self.start_date <= today <= self.end_date:
+            # Desativa todos os outros períodos
+            AcademicPeriod.objects.exclude(pk=self.pk).update(is_active=False)
+            self.is_active = True
+        # Se está sendo salvo manualmente como ativo, também desativa os outros
+        elif self.is_active:
+            AcademicPeriod.objects.exclude(pk=self.pk).update(is_active=False)
+        
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def update_active_period(cls):
+        """
+        Método de classe para atualizar automaticamente o período ativo.
+        Pode ser chamado periodicamente ou em views para garantir que sempre há um período correto ativo.
+        """
+        from django.utils import timezone
+        
+        today = timezone.now().date()
+        
+        # Busca período que contém a data atual
+        active_period = cls.objects.filter(
+            start_date__lte=today,
+            end_date__gte=today
+        ).first()
+        
+        if active_period:
+            # Desativa todos e ativa apenas o correto
+            cls.objects.exclude(pk=active_period.pk).update(is_active=False)
+            active_period.is_active = True
+            active_period.save(update_fields=['is_active'])
+            return active_period
+        
+        # Se não encontrou nenhum período para hoje, mantém o que está ativo
+        # ou ativa o primeiro período futuro se não houver nenhum ativo
+        current_active = cls.objects.filter(is_active=True).first()
+        if not current_active:
+            next_period = cls.objects.filter(start_date__gt=today).order_by('start_date').first()
+            if next_period:
+                next_period.is_active = True
+                next_period.save(update_fields=['is_active'])
+                return next_period
+        
+        return current_active
 
 class Grade(models.Model):
     """Lançamento de Notas"""
@@ -436,3 +604,67 @@ class AcademicHistory(models.Model):
 
     def __str__(self):
         return f"{self.student.name} - {self.year} - {self.classroom_name}"
+
+class StudentChecklistConfig(models.Model):
+    """Configuração de checklist por segmento - define quais segmentos devem ter checklist e quais campos são obrigatórios"""
+    segment = models.OneToOneField(
+        Segment,
+        on_delete=models.CASCADE,
+        related_name='checklist_config',
+        verbose_name="Segmento"
+    )
+    requires_checklist = models.BooleanField("Requer Checklist Diário?", default=False)
+    requires_lunch = models.BooleanField("Requer Almoço?", default=False)
+    requires_snack = models.BooleanField("Requer Lanche?", default=False)
+    requires_checkin = models.BooleanField("Requer Check-in (Entrada)?", default=False)
+    requires_checkout = models.BooleanField("Requer Check-out (Saída)?", default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Configuração de Checklist"
+        verbose_name_plural = "Configurações de Checklist"
+
+    def __str__(self):
+        return f"Checklist - {self.segment.name}"
+
+class StudentDailyChecklist(models.Model):
+    """Registro diário do checklist para cada aluno"""
+    enrollment = models.ForeignKey(
+        Enrollment,
+        on_delete=models.CASCADE,
+        related_name='daily_checklists',
+        verbose_name="Matrícula"
+    )
+    date = models.DateField("Data")
+    
+    # Campos do checklist
+    had_lunch = models.BooleanField("Comeu Almoço?", default=False, null=True, blank=True)
+    had_snack = models.BooleanField("Comeu Lanche?", default=False, null=True, blank=True)
+    checkin_time = models.TimeField("Hora de Entrada", null=True, blank=True)
+    checkout_time = models.TimeField("Hora de Saída", null=True, blank=True)
+    
+    observation = models.TextField("Observação", blank=True)
+    
+    # Quem registrou
+    registered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registered_checklists',
+        verbose_name="Registrado por"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Checklist Diário"
+        verbose_name_plural = "Checklists Diários"
+        unique_together = ('enrollment', 'date')
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"{self.enrollment.student.name} - {self.date}"

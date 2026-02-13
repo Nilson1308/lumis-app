@@ -3,7 +3,10 @@ from django.contrib.auth import get_user_model
 from .models import (
     Segment, ClassRoom, Subject, Guardian, Student, Enrollment,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory, LessonPlan, LessonPlanFile
+    ExtraActivityEnrollment, ExtraActivityAttendance,
+    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory, LessonPlan, LessonPlanFile,
+    ContraturnoClassroom, ContraturnoAttendance,
+    StudentChecklistConfig, StudentDailyChecklist
 )
 User = get_user_model()
 
@@ -53,9 +56,46 @@ class GuardianSerializer(serializers.ModelSerializer):
         return instance
 
 class ExtraActivitySerializer(serializers.ModelSerializer):
+    activity_type_display = serializers.CharField(source='get_activity_type_display', read_only=True)
     class Meta:
         model = ExtraActivity
         fields = '__all__'
+
+
+class ExtraActivityEnrollmentSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    activity_name = serializers.CharField(source='activity.name', read_only=True)
+    activity_type = serializers.CharField(source='activity.activity_type', read_only=True)
+
+    class Meta:
+        model = ExtraActivityEnrollment
+        fields = [
+            'id', 'student', 'student_name', 'activity', 'activity_name', 'activity_type',
+            'start_date', 'end_date', 'active', 'created_at'
+        ]
+
+    def validate(self, data):
+        student = data.get('student') or (self.instance.student if self.instance else None)
+        activity = data.get('activity') or (self.instance.activity if self.instance else None)
+        if not student or not activity:
+            return data
+
+        # Atividade INCLUDED só pode ser feita por aluno em período integral
+        if activity.activity_type == 'INCLUDED' and not student.is_full_time:
+            raise serializers.ValidationError({
+                'activity': 'Esta atividade é incluída no período integral. O aluno deve estar em período integral para se matricular.'
+            })
+        return data
+
+
+class ExtraActivityAttendanceSerializer(serializers.ModelSerializer):
+    enrollment_student = serializers.CharField(source='enrollment.student.name', read_only=True)
+    enrollment_activity = serializers.CharField(source='enrollment.activity.name', read_only=True)
+
+    class Meta:
+        model = ExtraActivityAttendance
+        fields = ['id', 'enrollment', 'enrollment_student', 'enrollment_activity', 'date', 'present', 'observation']
+
 
 class StudentSerializer(serializers.ModelSerializer):
     guardians_details = GuardianSerializer(source='guardians', many=True, read_only=True)
@@ -69,10 +109,11 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True)
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
     classroom_year = serializers.IntegerField(source='classroom.year', read_only=True) # Para mostrar no erro se precisar
+    student_is_full_time = serializers.BooleanField(source='student.is_full_time', read_only=True)
 
     class Meta:
         model = Enrollment
-        fields = ['id', 'student', 'student_name', 'classroom', 'classroom_name', 'classroom_year', 'date_enrolled', 'active']
+        fields = ['id', 'student', 'student_name', 'student_is_full_time', 'classroom', 'classroom_name', 'classroom_year', 'date_enrolled', 'active']
 
     def validate(self, data):
         """
@@ -118,11 +159,12 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
     classroom_year = serializers.IntegerField(source='classroom.year', read_only=True)
+    classroom_segment = serializers.IntegerField(source='classroom.segment.id', read_only=True)
     unread_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = TeacherAssignment
-        fields = ['id', 'teacher', 'teacher_name', 'subject', 'subject_name', 'classroom', 'classroom_name', 'classroom_year', 'unread_count']
+        fields = ['id', 'teacher', 'teacher_name', 'subject', 'subject_name', 'classroom', 'classroom_name', 'classroom_year', 'classroom_segment', 'unread_count']
 
     def get_teacher_name(self, obj):
         if obj.teacher:
@@ -347,3 +389,49 @@ class AcademicHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = AcademicHistory
         fields = '__all__'
+
+class StudentChecklistConfigSerializer(serializers.ModelSerializer):
+    segment_name = serializers.CharField(source='segment.name', read_only=True)
+
+    class Meta:
+        model = StudentChecklistConfig
+        fields = '__all__'
+
+class StudentDailyChecklistSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
+    classroom_name = serializers.CharField(source='enrollment.classroom.name', read_only=True)
+    registered_by_name = serializers.CharField(source='registered_by.get_full_name', read_only=True)
+
+    class Meta:
+        model = StudentDailyChecklist
+        fields = [
+            'id', 'enrollment', 'student_name', 'classroom_name',
+            'date', 'had_lunch', 'had_snack', 
+            'checkin_time', 'checkout_time', 'observation',
+            'registered_by', 'registered_by_name',
+            'created_at', 'updated_at'
+        ]
+
+class ContraturnoClassroomSerializer(serializers.ModelSerializer):
+    classroom_name = serializers.CharField(source='classroom.name', read_only=True)
+    teacher_name = serializers.CharField(source='teacher.get_full_name', read_only=True)
+    contraturno_period_display = serializers.CharField(source='get_contraturno_period_display', read_only=True)
+
+    class Meta:
+        model = ContraturnoClassroom
+        fields = [
+            'id', 'classroom', 'classroom_name', 'contraturno_period', 
+            'contraturno_period_display', 'teacher', 'teacher_name', 
+            'active', 'created_at', 'updated_at'
+        ]
+
+class ContraturnoAttendanceSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='enrollment.student.name', read_only=True)
+    classroom_name = serializers.CharField(source='enrollment.classroom.name', read_only=True)
+
+    class Meta:
+        model = ContraturnoAttendance
+        fields = [
+            'id', 'enrollment', 'student_name', 'classroom_name',
+            'date', 'present', 'justified', 'observation'
+        ]

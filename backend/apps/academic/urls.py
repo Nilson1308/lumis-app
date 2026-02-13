@@ -2,13 +2,16 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import reports
 from .views import (
-    SegmentViewSet, ClassRoomViewSet, StudentViewSet, 
+    SegmentViewSet, ClassRoomViewSet, StudentViewSet,
     EnrollmentViewSet, SubjectViewSet, TeacherAssignmentViewSet,
     GradeViewSet, AttendanceViewSet, AcademicPeriodViewSet,
     DashboardDataView, GuardianViewSet, LessonPlanViewSet,
     CoordinatorViewSet, AbsenceJustificationViewSet,
-    ExtraActivityViewSet, TaughtContentViewSet, SchoolEventViewSet,
-    ClassScheduleViewSet, AcademicHistoryViewSet
+    ExtraActivityViewSet, ExtraActivityEnrollmentViewSet, ExtraActivityAttendanceViewSet,
+    TaughtContentViewSet, SchoolEventViewSet,
+    ClassScheduleViewSet, AcademicHistoryViewSet,
+    ContraturnoClassroomViewSet, ContraturnoAttendanceViewSet,
+    StudentChecklistConfigViewSet, StudentDailyChecklistViewSet
 )
 
 router = DefaultRouter()
@@ -26,10 +29,16 @@ router.register(r'lesson-plans', LessonPlanViewSet, basename='lesson-plans')
 router.register(r'coordinators', CoordinatorViewSet, basename='coordinators')
 router.register(r'justifications', AbsenceJustificationViewSet)
 router.register(r'extra-activities', ExtraActivityViewSet)
+router.register(r'extra-activity-enrollments', ExtraActivityEnrollmentViewSet)
+router.register(r'extra-activity-attendances', ExtraActivityAttendanceViewSet)
 router.register(r'taught-contents', TaughtContentViewSet)
 router.register(r'calendar', SchoolEventViewSet, basename='calendar')
 router.register(r'schedules', ClassScheduleViewSet)
 router.register(r'academic-history', AcademicHistoryViewSet)
+router.register(r'contraturno-classrooms', ContraturnoClassroomViewSet)
+router.register(r'contraturno-attendances', ContraturnoAttendanceViewSet)
+router.register(r'checklist-configs', StudentChecklistConfigViewSet)
+router.register(r'student-checklists', StudentDailyChecklistViewSet)
 
 urlpatterns = [
     path('dashboard/data/', DashboardDataView.as_view(), name='dashboard_data'),

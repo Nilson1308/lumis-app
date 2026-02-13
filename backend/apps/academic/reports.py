@@ -9,7 +9,7 @@ except OSError:
     HTML = None
     CSS = None
 
-from .models import Enrollment, Grade, Attendance, Subject, AcademicPeriod
+from .models import Enrollment, Grade, Attendance, Subject, AcademicPeriod, TeacherAssignment
 from datetime import datetime
 
 def generate_student_report_card(request, enrollment_id):
@@ -30,7 +30,10 @@ def generate_student_report_card(request, enrollment_id):
 
     student = enrollment.student
     classroom = enrollment.classroom
-    subjects = Subject.objects.all().order_by('name')
+    # Apenas matérias do corpo docente da turma (TeacherAssignment)
+    subjects = Subject.objects.filter(
+        teacherassignment__classroom=classroom
+    ).distinct().order_by('name')
     
     # --- CORREÇÃO AQUI ---
     if selected_period:

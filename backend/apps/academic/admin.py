@@ -1,26 +1,70 @@
 from django.contrib import admin
 from .models import (
-    Segment, ClassRoom, Subject, Enrollment, 
-    TeacherAssignment, Student, Guardian, 
+    Segment, ClassRoom, Subject, Enrollment,
+    TeacherAssignment, Student, Guardian,
     Grade, Attendance, AcademicPeriod, LessonPlan,
-    ExtraActivity, TaughtContent, SchoolEvent
+    ExtraActivity, ExtraActivityEnrollment, ExtraActivityAttendance,
+    TaughtContent, SchoolEvent,
+    StudentChecklistConfig, StudentDailyChecklist
 )
 
 # --- CONFIGURAÇÕES AUXILIARES ---
 
 @admin.register(ExtraActivity)
 class ExtraActivityAdmin(admin.ModelAdmin):
-    list_display = ('name', 'price')
+    list_display = ('name', 'activity_type', 'price')
+    list_filter = ('activity_type',)
     search_fields = ('name',)
+
+
+@admin.register(ExtraActivityEnrollment)
+class ExtraActivityEnrollmentAdmin(admin.ModelAdmin):
+    list_display = ('student', 'activity', 'start_date', 'end_date', 'active')
+    list_filter = ('activity', 'active')
+    search_fields = ('student__name', 'activity__name')
+    autocomplete_fields = ['student', 'activity']
+
+
+@admin.register(ExtraActivityAttendance)
+class ExtraActivityAttendanceAdmin(admin.ModelAdmin):
+    list_display = ('enrollment', 'date', 'present', 'observation')
+    list_filter = ('present',)
+    search_fields = ('enrollment__student__name', 'enrollment__activity__name')
 
 @admin.register(AcademicPeriod)
 class AcademicPeriodAdmin(admin.ModelAdmin):
     list_display = ('name', 'start_date', 'end_date', 'is_active')
     list_filter = ('is_active',)
 
+# Inline para configurar checklist no formulário do Segmento
+class StudentChecklistConfigInline(admin.StackedInline):
+    model = StudentChecklistConfig
+    can_delete = False
+    verbose_name = "Configuração de Checklist"
+    verbose_name_plural = "Configuração de Checklist"
+    fields = (
+        'requires_checklist',
+        ('requires_lunch', 'requires_snack'),
+        ('requires_checkin', 'requires_checkout'),
+    )
+
 @admin.register(Segment)
 class SegmentAdmin(admin.ModelAdmin):
     list_display = ('name',)
+    inlines = [StudentChecklistConfigInline]
+
+@admin.register(StudentChecklistConfig)
+class StudentChecklistConfigAdmin(admin.ModelAdmin):
+    list_display = ('segment', 'requires_checklist', 'requires_lunch', 'requires_snack', 'requires_checkin', 'requires_checkout')
+    list_filter = ('requires_checklist',)
+    search_fields = ('segment__name',)
+
+@admin.register(StudentDailyChecklist)
+class StudentDailyChecklistAdmin(admin.ModelAdmin):
+    list_display = ('enrollment', 'date', 'had_lunch', 'had_snack', 'checkin_time', 'checkout_time', 'registered_by')
+    list_filter = ('date', 'had_lunch', 'had_snack')
+    search_fields = ('enrollment__student__name',)
+    date_hierarchy = 'date'
 
 @admin.register(ClassRoom)
 class ClassRoomAdmin(admin.ModelAdmin):

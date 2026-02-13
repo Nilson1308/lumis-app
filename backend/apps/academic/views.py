@@ -15,7 +15,10 @@ User = get_user_model()
 from .models import (
     Segment, ClassRoom, Guardian, Student, Enrollment, Subject,
     TeacherAssignment, Grade, Attendance, AcademicPeriod, LessonPlan, AbsenceJustification, ExtraActivity,
-    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory, LessonPlan, LessonPlanFile
+    ExtraActivityEnrollment, ExtraActivityAttendance,
+    TaughtContent, SchoolEvent, ClassSchedule, AcademicHistory, LessonPlan, LessonPlanFile,
+    ContraturnoClassroom, ContraturnoAttendance,
+    StudentChecklistConfig, StudentDailyChecklist
 )
 from .serializers import (
     SegmentSerializer, ClassRoomSerializer, StudentSerializer, 
@@ -23,8 +26,11 @@ from .serializers import (
     GradeSerializer, AttendanceSerializer, AcademicPeriodSerializer,
     GuardianSerializer, LessonPlanSerializer, SimpleUserSerializer, ParentStudentSerializer,
     GuardianProfileUpdateSerializer, StudentHealthUpdateSerializer, AbsenceJustificationSerializer,
-    ExtraActivitySerializer, TaughtContentSerializer, SchoolEventSerializer, ClassScheduleSerializer,
-    AcademicHistorySerializer, LessonPlanFileSerializer
+    ExtraActivitySerializer, ExtraActivityEnrollmentSerializer, ExtraActivityAttendanceSerializer,
+    TaughtContentSerializer, SchoolEventSerializer, ClassScheduleSerializer,
+    AcademicHistorySerializer, LessonPlanFileSerializer,
+    ContraturnoClassroomSerializer, ContraturnoAttendanceSerializer,
+    StudentChecklistConfigSerializer, StudentDailyChecklistSerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 from apps.coordination.models import StudentReport
@@ -151,6 +157,21 @@ class GuardianViewSet(viewsets.ModelViewSet):
 class ExtraActivityViewSet(viewsets.ModelViewSet):
     queryset = ExtraActivity.objects.all()
     serializer_class = ExtraActivitySerializer
+
+
+class ExtraActivityEnrollmentViewSet(viewsets.ModelViewSet):
+    queryset = ExtraActivityEnrollment.objects.all().select_related('student', 'activity')
+    serializer_class = ExtraActivityEnrollmentSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['student', 'activity', 'active']
+
+
+class ExtraActivityAttendanceViewSet(viewsets.ModelViewSet):
+    queryset = ExtraActivityAttendance.objects.all().select_related('enrollment', 'enrollment__student', 'enrollment__activity')
+    serializer_class = ExtraActivityAttendanceSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['enrollment', 'date']
+
 
 class StudentViewSet(viewsets.ModelViewSet):
     queryset = Student.objects.all().order_by('name')
@@ -313,12 +334,28 @@ class StudentViewSet(viewsets.ModelViewSet):
         })
 
 class EnrollmentViewSet(viewsets.ModelViewSet):
-    queryset = Enrollment.objects.all().order_by('student__name')
+    queryset = Enrollment.objects.select_related('student', 'classroom').all().order_by('student__name')
     serializer_class = EnrollmentSerializer
     filterset_fields = ['classroom', 'student']
     
     # 3. Adicione esta linha para forçar o uso da nossa paginação
     pagination_class = FlexiblePagination
+
+    @action(detail=False, methods=['get'])
+    def full_time_by_classroom(self, request):
+        """Retorna apenas alunos de período integral de uma turma específica"""
+        classroom_id = request.query_params.get('classroom')
+        if not classroom_id:
+            return Response({"error": "Parâmetro 'classroom' é obrigatório"}, status=400)
+        
+        enrollments = Enrollment.objects.filter(
+            classroom_id=classroom_id,
+            active=True,
+            student__is_full_time=True
+        ).select_related('student', 'classroom')
+        
+        serializer = self.get_serializer(enrollments, many=True)
+        return Response(serializer.data)
 
 class SubjectViewSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all().order_by('name')
@@ -430,6 +467,23 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if not subject_id or not date:
             return Response({"error": "Matéria e Data são obrigatórios"}, status=400)
 
+        # Atualiza automaticamente o período ativo antes de buscar
+        AcademicPeriod.update_active_period()
+        
+        # Busca o período acadêmico que contém a data
+        from .models import AcademicPeriod
+        from datetime import datetime
+        
+        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+        period = AcademicPeriod.objects.filter(
+            start_date__lte=date_obj,
+            end_date__gte=date_obj
+        ).first()
+        
+        # Se não encontrou período específico, usa o período ativo
+        if not period:
+            period = AcademicPeriod.objects.filter(is_active=True).first()
+
         # Transaction Atomic: Ou salva tudo, ou não salva nada (segurança)
         with transaction.atomic():
             created_count = 0
@@ -441,7 +495,10 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                     enrollment_id=item['enrollment_id'],
                     subject_id=subject_id,
                     date=date,
-                    defaults={'present': item['present']}
+                    defaults={
+                        'present': item['present'],
+                        'period': period
+                    }
                 )
                 if created: created_count += 1
                 else: updated_count += 1
@@ -452,10 +509,493 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             "updated": updated_count
         })
 
+    @action(detail=False, methods=['get'])
+    def weekly_dates(self, request):
+        """Retorna as datas da semana atual onde houve chamada para uma turma/matéria"""
+        subject_id = request.query_params.get('subject')
+        classroom_id = request.query_params.get('classroom')
+        
+        if not subject_id or not classroom_id:
+            return Response({"error": "Parâmetros 'subject' e 'classroom' são obrigatórios"}, status=400)
+        
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        # Segunda-feira da semana atual
+        monday = today - timedelta(days=today.weekday())
+        sunday = monday + timedelta(days=6)
+        
+        dates = Attendance.objects.filter(
+            subject_id=subject_id,
+            enrollment__classroom_id=classroom_id,
+            date__gte=monday,
+            date__lte=sunday
+        ).values_list('date', flat=True).distinct()
+        
+        # Converte para strings YYYY-MM-DD
+        date_strings = [str(d) for d in dates]
+        
+        return Response(date_strings)
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Retorna estatísticas de frequência por período para um aluno/matéria"""
+        enrollment_id = request.query_params.get('enrollment')
+        subject_id = request.query_params.get('subject')
+        
+        if not enrollment_id or not subject_id:
+            return Response({"error": "Parâmetros 'enrollment' e 'subject' são obrigatórios"}, status=400)
+        
+        from django.db.models import Count, Q
+        from .models import AcademicPeriod
+        
+        # Busca todas as frequências do aluno nesta matéria
+        attendances = Attendance.objects.filter(
+            enrollment_id=enrollment_id,
+            subject_id=subject_id
+        )
+        
+        # Estatísticas por período
+        periods_data = []
+        all_periods = AcademicPeriod.objects.all().order_by('start_date')
+        
+        for period in all_periods:
+            period_attendances = attendances.filter(period=period)
+            total = period_attendances.count()
+            presences = period_attendances.filter(present=True).count()
+            absences = total - presences
+            
+            periods_data.append({
+                'period_name': period.name,
+                'presences': presences,
+                'absences': absences,
+                'total': total
+            })
+        
+        # Estatísticas totais
+        total_count = attendances.count()
+        total_presences = attendances.filter(present=True).count()
+        total_absences = total_count - total_presences
+        
+        return Response({
+            'periods': periods_data,
+            'total': {
+                'presences': total_presences,
+                'absences': total_absences,
+                'total': total_count
+            }
+        })
+
+class ContraturnoClassroomViewSet(viewsets.ModelViewSet):
+    queryset = ContraturnoClassroom.objects.all().order_by('classroom__name')
+    serializer_class = ContraturnoClassroomSerializer
+    filterset_fields = ['classroom', 'teacher', 'contraturno_period', 'active']
+    pagination_class = LargeResultsSetPagination
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = ContraturnoClassroom.objects.all()
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+
+        if user.is_superuser or user.groups.filter(name__in=power_groups).exists():
+            return queryset
+        
+        # Se for Professor, só vê os contraturnos onde ele é responsável
+        return queryset.filter(teacher=user)
+
+    @action(detail=False, methods=['get'])
+    def my_contraturnos(self, request):
+        """Lista os contraturnos onde o professor logado é responsável"""
+        user = request.user
+        contraturnos = ContraturnoClassroom.objects.filter(teacher=user, active=True).order_by('classroom__name')
+        serializer = self.get_serializer(contraturnos, many=True)
+        return Response(serializer.data)
+
+class ContraturnoAttendanceViewSet(viewsets.ModelViewSet):
+    queryset = ContraturnoAttendance.objects.all().order_by('-date')
+    serializer_class = ContraturnoAttendanceSerializer
+    filterset_fields = [
+        'enrollment',
+        'date',
+        'enrollment__classroom',
+        'enrollment__student',
+    ]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = ContraturnoAttendance.objects.all()
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+
+        if user.is_superuser or user.groups.filter(name__in=power_groups).exists():
+            return queryset
+        
+        # Se for Professor, só vê frequências dos contraturnos onde ele é responsável
+        contraturno_classrooms = ContraturnoClassroom.objects.filter(teacher=user, active=True).values_list('classroom', flat=True)
+        return queryset.filter(enrollment__classroom__in=contraturno_classrooms)
+
+    @action(detail=False, methods=['post'])
+    def bulk_save(self, request):
+        """
+        Recebe uma lista de frequências do contraturno e salva todas de uma vez.
+        Esperado: {
+            "contraturno_classroom": 1,  # ID do ContraturnoClassroom
+            "date": "2025-02-20",
+            "records": [
+                {"enrollment_id": 10, "present": true},
+                {"enrollment_id": 11, "present": false}
+            ]
+        }
+        """
+        data = request.data
+        contraturno_id = data.get('contraturno_classroom')
+        date = data.get('date')
+        records = data.get('records', [])
+
+        if not contraturno_id or not date:
+            return Response({"error": "Contraturno e Data são obrigatórios"}, status=400)
+
+        try:
+            contraturno = ContraturnoClassroom.objects.get(pk=contraturno_id, active=True)
+        except ContraturnoClassroom.DoesNotExist:
+            return Response({"error": "Contraturno não encontrado ou inativo"}, status=404)
+
+        # Verifica permissão: só o professor responsável pode salvar
+        user = request.user
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+        if not (user.is_superuser or user.groups.filter(name__in=power_groups).exists() or contraturno.teacher == user):
+            return Response({"error": "Você não tem permissão para registrar frequência neste contraturno"}, status=403)
+
+        # Filtra apenas alunos de período integral da turma
+        classroom = contraturno.classroom
+        enrollments = Enrollment.objects.filter(
+            classroom=classroom,
+            active=True,
+            student__is_full_time=True
+        )
+
+        # Transaction Atomic: Ou salva tudo, ou não salva nada (segurança)
+        with transaction.atomic():
+            created_count = 0
+            updated_count = 0
+            
+            for item in records:
+                enrollment_id = item['enrollment_id']
+                
+                # Verifica se a matrícula pertence à turma do contraturno
+                if not enrollments.filter(pk=enrollment_id).exists():
+                    continue
+                
+                # update_or_create: Se já lançou chamada nesse dia, atualiza. Se não, cria.
+                obj, created = ContraturnoAttendance.objects.update_or_create(
+                    enrollment_id=enrollment_id,
+                    date=date,
+                    defaults={
+                        'present': item['present'],
+                        'justified': item.get('justified', False),
+                        'observation': item.get('observation', '')
+                    }
+                )
+                if created: created_count += 1
+                else: updated_count += 1
+
+        return Response({
+            "message": "Chamada do contraturno realizada com sucesso!",
+            "created": created_count,
+            "updated": updated_count
+        })
+
+    @action(detail=False, methods=['get'])
+    def by_contraturno(self, request):
+        """Lista frequências de um contraturno específico em uma data"""
+        contraturno_id = request.query_params.get('contraturno_classroom')
+        date = request.query_params.get('date')
+
+        if not contraturno_id or not date:
+            return Response({"error": "Parâmetros contraturno_classroom e date são obrigatórios"}, status=400)
+
+        try:
+            contraturno = ContraturnoClassroom.objects.get(pk=contraturno_id, active=True)
+        except ContraturnoClassroom.DoesNotExist:
+            return Response({"error": "Contraturno não encontrado"}, status=404)
+
+        # Busca frequências existentes
+        enrollments = Enrollment.objects.filter(
+            classroom=contraturno.classroom,
+            active=True,
+            student__is_full_time=True
+        )
+        
+        attendances = ContraturnoAttendance.objects.filter(
+            enrollment__in=enrollments,
+            date=date
+        )
+
+        serializer = self.get_serializer(attendances, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def weekly_dates(self, request):
+        """Retorna as datas da semana atual onde houve chamada do contraturno"""
+        contraturno_id = request.query_params.get('contraturno_classroom')
+        
+        if not contraturno_id:
+            return Response({"error": "Parâmetro 'contraturno_classroom' é obrigatório"}, status=400)
+        
+        try:
+            contraturno = ContraturnoClassroom.objects.get(pk=contraturno_id, active=True)
+        except ContraturnoClassroom.DoesNotExist:
+            return Response({"error": "Contraturno não encontrado"}, status=404)
+        
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        # Segunda-feira da semana atual
+        monday = today - timedelta(days=today.weekday())
+        sunday = monday + timedelta(days=6)
+        
+        enrollments = Enrollment.objects.filter(
+            classroom=contraturno.classroom,
+            active=True,
+            student__is_full_time=True
+        )
+        
+        dates = ContraturnoAttendance.objects.filter(
+            enrollment__in=enrollments,
+            date__gte=monday,
+            date__lte=sunday
+        ).values_list('date', flat=True).distinct()
+        
+        # Converte para strings YYYY-MM-DD
+        date_strings = [str(d) for d in dates]
+        
+        return Response(date_strings)
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Retorna estatísticas de frequência do contraturno por período"""
+        enrollment_id = request.query_params.get('enrollment')
+        
+        if not enrollment_id:
+            return Response({"error": "Parâmetro 'enrollment' é obrigatório"}, status=400)
+        
+        from django.db.models import Count, Q
+        from .models import AcademicPeriod
+        
+        # Busca todas as frequências do aluno no contraturno
+        attendances = ContraturnoAttendance.objects.filter(enrollment_id=enrollment_id)
+        
+        # Estatísticas por período (simplificado - contraturno não tem período acadêmico vinculado)
+        # Vamos agrupar por mês/trimestre
+        from collections import defaultdict
+        from datetime import datetime
+        
+        periods_data = []
+        monthly_stats = defaultdict(lambda: {'presences': 0, 'absences': 0, 'total': 0})
+        
+        for att in attendances:
+            month_key = att.date.strftime('%Y-%m')
+            monthly_stats[month_key]['total'] += 1
+            if att.present:
+                monthly_stats[month_key]['presences'] += 1
+            else:
+                monthly_stats[month_key]['absences'] += 1
+        
+        # Mapeamento de meses em português
+        month_names = {
+            '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
+            '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
+            '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
+        }
+        
+        for month_key, stats in sorted(monthly_stats.items()):
+            year, month = month_key.split('-')
+            month_name = f"{month_names.get(month, month)}/{year}"
+            periods_data.append({
+                'period_name': month_name,
+                'presences': stats['presences'],
+                'absences': stats['absences'],
+                'total': stats['total']
+            })
+        
+        # Estatísticas totais
+        total_count = attendances.count()
+        total_presences = attendances.filter(present=True).count()
+        total_absences = total_count - total_presences
+        
+        return Response({
+            'periods': periods_data,
+            'total': {
+                'presences': total_presences,
+                'absences': total_absences,
+                'total': total_count
+            }
+        })
+
 class AcademicPeriodViewSet(viewsets.ModelViewSet):
     queryset = AcademicPeriod.objects.all().order_by('start_date') 
     serializer_class = AcademicPeriodSerializer
     search_fields = ['name']
+    
+    def get_queryset(self):
+        # Atualiza automaticamente o período ativo antes de retornar a lista
+        AcademicPeriod.update_active_period()
+        return super().get_queryset()
+    
+    @action(detail=False, methods=['post'])
+    def update_active(self, request):
+        """Endpoint para atualizar manualmente o período ativo"""
+        period = AcademicPeriod.update_active_period()
+        if period:
+            serializer = self.get_serializer(period)
+            return Response({
+                'message': f'Período {period.name} ativado automaticamente',
+                'period': serializer.data
+            })
+        return Response({'message': 'Nenhum período encontrado para a data atual'}, status=404)
+
+class StudentChecklistConfigViewSet(viewsets.ModelViewSet):
+    queryset = StudentChecklistConfig.objects.all().select_related('segment')
+    serializer_class = StudentChecklistConfigSerializer
+    pagination_class = LargeResultsSetPagination
+    filterset_fields = ['segment', 'requires_checklist']
+
+class StudentDailyChecklistViewSet(viewsets.ModelViewSet):
+    queryset = StudentDailyChecklist.objects.all().order_by('-date')
+    serializer_class = StudentDailyChecklistSerializer
+    filterset_fields = [
+        'enrollment',
+        'date',
+        'enrollment__classroom',
+        'enrollment__student',
+    ]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = StudentDailyChecklist.objects.all()
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+
+        if user.is_superuser or user.groups.filter(name__in=power_groups).exists():
+            return queryset
+        
+        # Se for Professor, só vê checklists das turmas onde ele está atribuído
+        assignments = TeacherAssignment.objects.filter(teacher=user).values_list('classroom', flat=True)
+        return queryset.filter(enrollment__classroom__in=assignments)
+
+    def perform_create(self, serializer):
+        """Salva automaticamente quem registrou"""
+        serializer.save(registered_by=self.request.user)
+
+    def perform_update(self, serializer):
+        """Atualiza quem registrou"""
+        serializer.save(registered_by=self.request.user)
+
+    @action(detail=False, methods=['post'])
+    def bulk_save(self, request):
+        """
+        Salva múltiplos checklists de uma vez.
+        Esperado: {
+            "classroom": 1,
+            "date": "2025-02-20",
+            "records": [
+                {
+                    "enrollment_id": 10,
+                    "had_lunch": true,
+                    "had_snack": false,
+                    "checkin_time": "07:30:00",
+                    "checkout_time": "17:00:00"
+                }
+            ]
+        }
+        """
+        data = request.data
+        classroom_id = data.get('classroom')
+        date = data.get('date')
+        records = data.get('records', [])
+
+        if not classroom_id or not date:
+            return Response({"error": "Turma e Data são obrigatórios"}, status=400)
+
+        # Verifica se a turma requer checklist
+        try:
+            classroom = ClassRoom.objects.get(pk=classroom_id)
+            config = StudentChecklistConfig.objects.filter(segment=classroom.segment, requires_checklist=True).first()
+            
+            if not config:
+                return Response({"error": "Este segmento não requer checklist diário"}, status=400)
+        except ClassRoom.DoesNotExist:
+            return Response({"error": "Turma não encontrada"}, status=404)
+
+        # Verifica permissão: só professores atribuídos à turma podem registrar
+        user = request.user
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+        has_assignment = TeacherAssignment.objects.filter(teacher=user, classroom=classroom).exists()
+        
+        if not (user.is_superuser or user.groups.filter(name__in=power_groups).exists() or has_assignment):
+            return Response({"error": "Você não tem permissão para registrar checklist nesta turma"}, status=403)
+
+        enrollments = Enrollment.objects.filter(classroom=classroom, active=True)
+
+        # Transaction Atomic
+        with transaction.atomic():
+            created_count = 0
+            updated_count = 0
+            
+            for item in records:
+                enrollment_id = item.get('enrollment_id')
+                
+                # Verifica se a matrícula pertence à turma
+                if not enrollments.filter(pk=enrollment_id).exists():
+                    continue
+                
+                # Prepara os dados do checklist
+                checklist_data = {
+                    'had_lunch': item.get('had_lunch'),
+                    'had_snack': item.get('had_snack'),
+                    'checkin_time': item.get('checkin_time'),
+                    'checkout_time': item.get('checkout_time'),
+                    'observation': item.get('observation', ''),
+                    'registered_by': user
+                }
+                
+                # Remove campos None/vazios se não são obrigatórios
+                if not config.requires_lunch:
+                    checklist_data.pop('had_lunch', None)
+                if not config.requires_snack:
+                    checklist_data.pop('had_snack', None)
+                if not config.requires_checkin:
+                    checklist_data.pop('checkin_time', None)
+                if not config.requires_checkout:
+                    checklist_data.pop('checkout_time', None)
+                
+                obj, created = StudentDailyChecklist.objects.update_or_create(
+                    enrollment_id=enrollment_id,
+                    date=date,
+                    defaults=checklist_data
+                )
+                if created: created_count += 1
+                else: updated_count += 1
+
+        return Response({
+            "message": "Checklist salvo com sucesso!",
+            "created": created_count,
+            "updated": updated_count
+        })
+
+    @action(detail=False, methods=['get'])
+    def by_classroom_date(self, request):
+        """Lista checklists de uma turma em uma data específica"""
+        classroom_id = request.query_params.get('classroom')
+        date = request.query_params.get('date')
+
+        if not classroom_id or not date:
+            return Response({"error": "Parâmetros 'classroom' e 'date' são obrigatórios"}, status=400)
+
+        enrollments = Enrollment.objects.filter(classroom_id=classroom_id, active=True)
+        checklists = StudentDailyChecklist.objects.filter(
+            enrollment__in=enrollments,
+            date=date
+        )
+
+        serializer = self.get_serializer(checklists, many=True)
+        return Response(serializer.data)
 
 class DashboardDataView(APIView):
     permission_classes = [permissions.IsAuthenticated]
