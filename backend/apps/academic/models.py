@@ -127,6 +127,11 @@ class Student(models.Model):
     medical_report = models.FileField("Laudo Médico", upload_to='students/medical/', null=True, blank=True)
     prescription = models.FileField("Receita Médica", upload_to='students/prescriptions/', null=True, blank=True)
 
+    # Autorizações e Contatos
+    image_authorization = models.BooleanField("Autorização de Imagem", null=True, blank=True, help_text="Autoriza uso de imagem do aluno em fotos/vídeos")
+    exit_authorization = models.TextField("Autorização de Saída", blank=True, help_text="Quem está autorizado a retirar o aluno")
+    close_contacts = models.TextField("Contatos Próximos", blank=True, help_text="Pessoas de confiança / contatos próximos")
+
     # Vínculos
     # ManyToMany: Um aluno pode ter vários responsáveis (Pai e Mãe)
     # e um responsável pode ter vários alunos (Irmãos)

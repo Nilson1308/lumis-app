@@ -27,6 +27,7 @@ const student = ref({
     zip_code: '', street: '', number: '', complement: '', neighborhood: '', city: 'Mogi das Cruzes', state: 'SP',
     period: 'AFTERNOON', is_full_time: false, meals: 'NONE',
     allergies: '', medications: '', emergency_contact: '',
+    image_authorization: null, exit_authorization: '', close_contacts: '',
     guardians: [],
     photo_preview: null // Apenas visual
 });
@@ -75,6 +76,7 @@ const resetForm = () => {
     student.value = {
         name: '', registration_number: '', ra: '', nationality: 'Brasileira', city: 'Mogi das Cruzes', state: 'SP',
         period: 'AFTERNOON', is_full_time: false, meals: 'NONE',
+        image_authorization: null, exit_authorization: '', close_contacts: '',
         guardians: [], photo_preview: null
     };
 };
@@ -144,13 +146,19 @@ const saveStudent = async () => {
     const fields = [
         'name', 'registration_number', 'ra', 'birth_date', 'gender', 'cpf', 'rg', 'nationality',
         'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
-        'period', 'meals', 'is_full_time', 'allergies', 'medications', 'emergency_contact'
+        'period', 'meals', 'is_full_time', 'allergies', 'medications', 'emergency_contact',
+        'image_authorization', 'exit_authorization', 'close_contacts'
     ];
 
     fields.forEach(f => {
         let val = student.value[f];
         if (f === 'birth_date' && val instanceof Date) val = val.toISOString().split('T')[0];
         if (f === 'is_full_time') val = val ? 'true' : 'false';
+        if (f === 'image_authorization') {
+            if (val === true) formData.append(f, 'true');
+            else if (val === false) formData.append(f, 'false');
+            return;
+        }
         if (val !== null && val !== undefined) formData.append(f, val);
     });
 
@@ -321,6 +329,22 @@ const saveStudent = async () => {
                         <label class="block font-bold mb-3">Contato de Emergência</label>
                         <InputText v-model="student.emergency_contact" placeholder="Nome e Telefone" fluid />
                     </div>
+                    <div class="mb-4">
+                        <label class="block font-bold mb-3">Autorização de Imagem</label>
+                        <Dropdown 
+                            v-model="student.image_authorization" 
+                            :options="[
+                                { label: 'Sim', value: true },
+                                { label: 'Não', value: false },
+                                { label: 'Não informado', value: null }
+                            ]" 
+                            optionLabel="label" 
+                            optionValue="value" 
+                            placeholder="Selecione" 
+                            fluid 
+                        />
+                        <small class="text-gray-500">Autoriza o uso de imagem do aluno em fotos, vídeos e redes sociais.</small>
+                    </div>
                     
                     <Divider />
                     
@@ -378,12 +402,20 @@ const saveStudent = async () => {
                 </TabPanel>
 
                 <TabPanel value="4">
-                    <div class="mb-2">
+                    <div class="mb-4">
                         <label class="block font-bold mb-3">Vincular Responsáveis</label>
                         <MultiSelect v-model="student.guardians" :options="guardians" optionLabel="label" optionValue="id" placeholder="Busque..." display="chip" filter fluid />
                         <small class="block mt-2 text-gray-500">
                              Não encontrou? Cadastre na tela de Responsáveis primeiro.
                         </small>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block font-bold mb-3">Autorização de Saída</label>
+                        <Textarea v-model="student.exit_authorization" rows="3" autoResize fluid placeholder="Quem está autorizado a retirar o aluno da escola (ex.: Pai, Mãe, Avó Maria)" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="block font-bold mb-3">Contatos Próximos</label>
+                        <Textarea v-model="student.close_contacts" rows="3" autoResize fluid placeholder="Pessoas de confiança, contatos próximos (texto livre)" />
                     </div>
                 </TabPanel>
 
