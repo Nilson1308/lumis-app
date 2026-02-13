@@ -329,22 +329,6 @@ const saveStudent = async () => {
                         <label class="block font-bold mb-3">Contato de Emergência</label>
                         <InputText v-model="student.emergency_contact" placeholder="Nome e Telefone" fluid />
                     </div>
-                    <div class="mb-4">
-                        <label class="block font-bold mb-3">Autorização de Imagem</label>
-                        <Dropdown 
-                            v-model="student.image_authorization" 
-                            :options="[
-                                { label: 'Sim', value: true },
-                                { label: 'Não', value: false },
-                                { label: 'Não informado', value: null }
-                            ]" 
-                            optionLabel="label" 
-                            optionValue="value" 
-                            placeholder="Selecione" 
-                            fluid 
-                        />
-                        <small class="text-gray-500">Autoriza o uso de imagem do aluno em fotos, vídeos e redes sociais.</small>
-                    </div>
                     
                     <Divider />
                     
@@ -408,6 +392,22 @@ const saveStudent = async () => {
                         <small class="block mt-2 text-gray-500">
                              Não encontrou? Cadastre na tela de Responsáveis primeiro.
                         </small>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block font-bold mb-3">Autorização de Imagem</label>
+                        <Dropdown 
+                            v-model="student.image_authorization" 
+                            :options="[
+                                { label: 'Sim', value: true },
+                                { label: 'Não', value: false },
+                                { label: 'Não informado', value: null }
+                            ]" 
+                            optionLabel="label" 
+                            optionValue="value" 
+                            placeholder="Selecione" 
+                            fluid 
+                        />
+                        <small class="text-gray-500">Responsáveis autorizam uso de imagem do aluno em fotos, vídeos e redes sociais.</small>
                     </div>
                     <div class="mb-4">
                         <label class="block font-bold mb-3">Autorização de Saída</label>
