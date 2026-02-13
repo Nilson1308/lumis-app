@@ -234,7 +234,7 @@ class LessonPlanSerializer(serializers.ModelSerializer):
             'start_date', 'end_date', 'status', 
             'recipients', 'attachments', 'attachment', # Mantemos 'attachment' para ler os antigos se precisar
             'coordinator_note', 'teacher_name', 'subject_name', 
-            'classroom_name', 'created_at'
+            'classroom_name', 'created_at', 'updated_at'
         ]
     
     def validate_start_date(self, value):

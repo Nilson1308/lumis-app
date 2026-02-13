@@ -272,6 +272,14 @@ const executeUnsubscribe = async () => {
                     <Tag :value="getStatusLabel(slotProps.data.status)" :severity="getSeverity(slotProps.data.status)" />
                 </template>
             </Column>
+            <Column header="Enviado em">
+                <template #body="slotProps">
+                    <span v-if="slotProps.data.updated_at">
+                        {{ new Date(slotProps.data.updated_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) }}
+                    </span>
+                    <span v-else class="text-gray-400">-</span>
+                </template>
+            </Column>
             
             <Column header="Ações">
                 <template #body="slotProps">
@@ -286,6 +294,9 @@ const executeUnsubscribe = async () => {
                     <div class="mb-3">
                         <span class="text-sm text-gray-500 block">Tópico / Objetivo</span>
                         <h3 class="m-0 font-bold text-xl">{{ currentPlan.topic }}</h3>
+                        <span v-if="currentPlan.updated_at" class="text-sm text-600 mt-2 block">
+                            <i class="pi pi-clock mr-1"></i> Enviado em {{ new Date(currentPlan.updated_at).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' }) }}
+                        </span>
                     </div>
                     
                     <div class="mb-4">
