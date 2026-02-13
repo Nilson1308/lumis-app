@@ -12,6 +12,7 @@ const loading = ref(true);
 const minuteDialog = ref(false);
 const deleteDialog = ref(false);
 const submitted = ref(false);
+const participantsOptions = ref([]);
 
 // --- CARREGAR DADOS ---
 const fetchMinutes = async () => {
@@ -26,20 +27,103 @@ const fetchMinutes = async () => {
     }
 };
 
+const loadParticipants = async () => {
+    try {
+        // Carrega usuários de diferentes grupos
+        // Busca coordenadores com variações de nome do grupo
+        const [teachersRes, coordinatorsRes1, coordinatorsRes2, secretariesRes] = await Promise.all([
+            api.get('users/?role=teacher&page_size=1000'),
+            api.get('users/?group=Coordenadores&page_size=1000'),
+            api.get('users/?group=Coordenacao&page_size=1000'), // Variação sem acento
+            api.get('users/?group=Secretaria&page_size=1000')
+        ]);
+
+        const teachers = (teachersRes.data.results || teachersRes.data).map(u => ({
+            id: u.id,
+            name: u.full_name || u.first_name || u.username,
+            group: 'Professores'
+        }));
+
+        // Combina coordenadores de ambas as variações
+        const coordinators1 = (coordinatorsRes1.data.results || coordinatorsRes1.data).map(u => ({
+            id: u.id,
+            name: u.full_name || u.first_name || u.username,
+            group: 'Coordenadores'
+        }));
+
+        const coordinators2 = (coordinatorsRes2.data.results || coordinatorsRes2.data).map(u => ({
+            id: u.id,
+            name: u.full_name || u.first_name || u.username,
+            group: 'Coordenadores'
+        }));
+
+        const coordinators = [...coordinators1, ...coordinators2];
+
+        const secretaries = (secretariesRes.data.results || secretariesRes.data).map(u => ({
+            id: u.id,
+            name: u.full_name || u.first_name || u.username,
+            group: 'Secretaria'
+        }));
+
+        // Combina todos e remove duplicados por ID
+        const allUsers = [...teachers, ...coordinators, ...secretaries];
+        const uniqueUsers = Array.from(new Map(allUsers.map(u => [u.id, u])).values());
+        
+        participantsOptions.value = uniqueUsers.sort((a, b) => a.name.localeCompare(b.name));
+        
+        // Debug: mostra quantos de cada tipo foram carregados
+        console.log(`Participantes carregados: ${teachers.length} professores, ${coordinators.length} coordenadores, ${secretaries.length} secretários`);
+    } catch (error) {
+        console.error('Erro ao carregar participantes:', error);
+        toast.add({ severity: 'warn', summary: 'Aviso', detail: 'Erro ao carregar lista de participantes', life: 3000 });
+    }
+};
+
 // --- AÇÕES ---
-const openNew = () => {
+const openNew = async () => {
     minute.value = {
-        date: new Date() // Padrão: Hoje
+        date: new Date(), // Padrão: Hoje
+        participants: [],
+        guests: ''
     };
     submitted.value = false;
+    if (participantsOptions.value.length === 0) {
+        await loadParticipants();
+    }
     minuteDialog.value = true;
 };
 
-const editMinute = (item) => {
+const editMinute = async (item) => {
     minute.value = { ...item };
     // Corrige data string para objeto Date
     if (minute.value.date) {
         minute.value.date = new Date(minute.value.date);
+    }
+    // Converte string de participantes para array de IDs
+    if (minute.value.participants && typeof minute.value.participants === 'string') {
+        // Tenta encontrar os IDs correspondentes aos nomes na string
+        const participantNames = minute.value.participants.split(',').map(n => n.trim());
+        const foundIds = participantsOptions.value
+            .filter(p => participantNames.some(name => p.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(p.name.toLowerCase())))
+            .map(p => p.id);
+        minute.value.participants = foundIds.length > 0 ? foundIds : [];
+    } else if (!Array.isArray(minute.value.participants)) {
+        minute.value.participants = [];
+    }
+    // Garante que guests existe
+    if (!minute.value.guests) {
+        minute.value.guests = '';
+    }
+    if (participantsOptions.value.length === 0) {
+        await loadParticipants();
+        // Recarrega após carregar participantes para fazer a conversão correta
+        if (minute.value.participants && typeof minute.value.participants === 'string') {
+            const participantNames = minute.value.participants.split(',').map(n => n.trim());
+            const foundIds = participantsOptions.value
+                .filter(p => participantNames.some(name => p.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(p.name.toLowerCase())))
+                .map(p => p.id);
+            minute.value.participants = foundIds.length > 0 ? foundIds : [];
+        }
     }
     minuteDialog.value = true;
 };
@@ -59,6 +143,14 @@ const saveMinute = async () => {
         if (payload.date instanceof Date) {
             const offset = payload.date.getTimezoneOffset();
             payload.date = new Date(payload.date.getTime() - (offset*60*1000)).toISOString().split('T')[0];
+        }
+        
+        // Converte array de IDs de participantes para string com nomes separados por vírgula
+        if (Array.isArray(payload.participants) && payload.participants.length > 0) {
+            const selectedParticipants = participantsOptions.value.filter(p => payload.participants.includes(p.id));
+            payload.participants = selectedParticipants.map(p => p.name).join(', ');
+        } else {
+            payload.participants = '';
         }
 
         try {
@@ -141,8 +233,29 @@ onMounted(() => {
 
                 <div class="mb-2">
                     <label class="mb-2 block font-bold">Participantes</label>
-                    <InputText v-model="minute.participants" placeholder="Ex: Livia, Nilson, Coordenadores..." fluid />
-                    <small class="text-500">Liste os nomes separados por vírgula.</small>
+                    <MultiSelect 
+                        v-model="minute.participants" 
+                        :options="participantsOptions" 
+                        optionLabel="name" 
+                        optionValue="id"
+                        placeholder="Selecione os participantes"
+                        :maxSelectedLabels="3"
+                        selectedItemsLabel="{0} participantes selecionados"
+                        display="chip"
+                        filter
+                        class="w-full"
+                    />
+                    <small class="text-500">Selecione professores, coordenadores ou secretaria.</small>
+                </div>
+
+                <div class="mb-2">
+                    <label class="mb-2 block font-bold">Convidados</label>
+                    <InputText 
+                        v-model="minute.guests" 
+                        placeholder="Ex: Pais, representantes, visitantes..." 
+                        fluid 
+                    />
+                    <small class="text-500">Liste os convidados externos separados por vírgula.</small>
                 </div>
 
                 <div class="mb-2">

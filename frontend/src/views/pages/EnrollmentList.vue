@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { FilterMatchMode } from '@primevue/core/api'; // Importação do filtro
 import api from '@/service/api';
+import StudentFormDialog from '@/components/StudentFormDialog.vue';
 
 const toast = useToast();
 
@@ -25,6 +26,8 @@ const selectedClassroom = ref(null);
 const enrollment = ref({});
 const enrollmentDialog = ref(false);
 const deleteDialog = ref(false);
+const studentDialog = ref(false);
+const selectedStudentId = ref(null);
 
 // --- FILTROS DA TABELA ---
 const filters = ref({
@@ -173,6 +176,17 @@ const deleteEnrollment = async () => {
     }
 };
 
+// Abre o dialog de edição do aluno
+const openStudentDialog = (enrollmentItem) => {
+    selectedStudentId.value = enrollmentItem.student;
+    studentDialog.value = true;
+};
+
+// Callback quando o aluno é salvo
+const onStudentSaved = () => {
+    fetchEnrollments(); // Recarrega a lista para atualizar os dados
+};
+
 // Gera o PDF
 const generatePDF = () => {
     let url = `reports/student_card/${studentToPrint.value}/`;
@@ -274,15 +288,26 @@ onMounted(() => {
                     </template>
                 </Column>
                 
-                <Column header="Ações" style="width: 15%">
+                <Column header="Ações" style="width: 20%">
                     <template #body="slotProps">
+                        <Button 
+                            icon="pi pi-user-edit" 
+                            class="p-button-rounded mr-2" 
+                            v-tooltip.top="'Editar Aluno'"
+                            @click="openStudentDialog(slotProps.data)" 
+                        />
                         <Button 
                             icon="pi pi-print" 
                             class="p-button-rounded mr-2" 
                             v-tooltip.top="'Imprimir Boletim'"
                             @click="openPrintDialog(slotProps.data.id)" 
                         />
-                        <Button icon="pi pi-trash" class="p-button-rounded" @click="confirmDelete(slotProps.data)" />
+                        <Button 
+                            icon="pi pi-trash" 
+                            class="p-button-rounded" 
+                            v-tooltip.top="'Remover Matrícula'"
+                            @click="confirmDelete(slotProps.data)" 
+                        />
                     </template>
                 </Column>
             </DataTable>
@@ -314,7 +339,7 @@ onMounted(() => {
                 </div>
                 <template #footer>
                     <Button label="Não" icon="pi pi-times" class="p-button-text" @click="deleteDialog = false" />
-                    <Button label="Sim" icon="pi pi-check" class="p-button-text p-button-danger" @click="deleteEnrollment" />
+                    <Button label="Sim" icon="pi pi-check" class="p-button-text" @click="deleteEnrollment" />
                 </template>
             </Dialog>
 
@@ -336,6 +361,14 @@ onMounted(() => {
                     <Button label="Gerar PDF" icon="pi pi-file-pdf" @click="generatePDF" :loading="loading" />
                 </template>
             </Dialog>
+
+            <!-- Dialog de Edição do Aluno -->
+            <StudentFormDialog 
+                :visible="studentDialog"
+                :studentId="selectedStudentId"
+                @update:visible="studentDialog = $event"
+                @saved="onStudentSaved"
+            />
 
         </div>
     </div>

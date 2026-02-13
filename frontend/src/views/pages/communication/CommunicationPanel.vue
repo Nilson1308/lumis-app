@@ -91,7 +91,7 @@ const loadMessages = async () => {
 
     } catch (e) {
         console.error(e);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar.', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -165,7 +165,7 @@ const openEdit = (msg) => {
 // 3. Salvar (Inteligente: Cria ou Atualiza)
 const sendMessage = async () => {
     if (!newMessage.value.title || !newMessage.value.message || newMessage.value.recipient_ids.length === 0) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha todos os campos.' });
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha todos os campos.', life: 3000 });
         return;
     }
 
@@ -173,17 +173,17 @@ const sendMessage = async () => {
         if (newMessage.value.id) {
             // EDIÇÃO (PUT/PATCH)
             await api.patch(`announcements/${newMessage.value.id}/`, newMessage.value);
-            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Comunicado corrigido com sucesso!' });
+            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Comunicado corrigido com sucesso!', life: 3000 });
         } else {
             // CRIAÇÃO (POST)
             await api.post('announcements/', newMessage.value);
-            toast.add({ severity: 'success', summary: 'Enviado', detail: 'Comunicado criado com sucesso!' });
+            toast.add({ severity: 'success', summary: 'Enviado', detail: 'Comunicado criado com sucesso!', life: 3000 });
         }
         
         createDialog.value = false;
         loadMessages(); // Recarrega a lista
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar.', life: 3000 });
     }
 };
 
@@ -197,11 +197,11 @@ const confirmDelete = (msg) => {
 const deleteMessage = async () => {
     try {
         await api.delete(`announcements/${selectedMessage.value.id}/`);
-        toast.add({ severity: 'success', summary: 'Removido', detail: 'Comunicado excluído.' });
+        toast.add({ severity: 'success', summary: 'Removido', detail: 'Comunicado excluído.', life: 3000 });
         deleteDialog.value = false;
         loadMessages();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir.', life: 3000 });
     }
 };
 
@@ -215,7 +215,7 @@ const openReport = async (msg) => {
         const { data } = await api.get(`announcements/${msg.id}/report/`);
         readReport.value = data;
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar relatório.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar relatório.', life: 3000 });
     }
 };
 

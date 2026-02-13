@@ -10,10 +10,10 @@ const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 
-const assignmentId = route.params.id;
+const contraturnoId = route.params.id;
 
 // --- ESTADOS ---
-const assignment = ref(null);
+const contraturno = ref(null);
 const students = ref([]);
 const loading = ref(true);
 const saving = ref(false);
@@ -36,21 +36,42 @@ const formatDateForAPI = (date) => {
 };
 
 // --- CARREGAR DADOS ---
-const loadClassData = async () => {
+const loadContraturnoData = async () => {
     loading.value = true;
     try {
-        // 1. Pega dados da turma/matéria
-        const resAssign = await api.get(`assignments/${assignmentId}/`);
-        assignment.value = resAssign.data;
+        // 1. Pega dados do contraturno
+        const resContraturno = await api.get(`contraturno-classrooms/${contraturnoId}/`);
+        contraturno.value = resContraturno.data;
 
-        // 2. Carrega alunos da turma
-        const resEnroll = await api.get(`enrollments/?classroom=${assignment.value.classroom}&page_size=100`);
-        
+        // 2. Carrega alunos de período integral da turma
+        // Usa endpoint específico para buscar apenas alunos de período integral
+        let fullTimeEnrollments = [];
+        try {
+            const resEnroll = await api.get(`enrollments/full_time_by_classroom/?classroom=${contraturno.value.classroom}`);
+            fullTimeEnrollments = resEnroll.data || [];
+        } catch (error) {
+            // Fallback: busca todos e filtra no frontend
+            console.warn('Endpoint específico não disponível, usando fallback', error);
+            const resEnroll = await api.get(`enrollments/?classroom=${contraturno.value.classroom}&page_size=100`);
+            fullTimeEnrollments = (resEnroll.data.results || resEnroll.data || []).filter(
+                e => e.student_is_full_time === true
+            );
+        }
+
+        if (fullTimeEnrollments.length === 0) {
+            toast.add({ 
+                severity: 'warn', 
+                summary: 'Atenção', 
+                detail: 'Nenhum aluno de período integral encontrado nesta turma. Verifique se o aluno está marcado como período integral.', 
+                life: 5000 
+            });
+        }
+
         // 3. Prepara a lista base (assumindo Presença = True inicialmente)
-        const initialStudents = resEnroll.data.results.map(s => ({
+        const initialStudents = fullTimeEnrollments.map(s => ({
             id: s.id, // ID da Matrícula (Enrollment)
             student_name: s.student_name,
-            present: true // Padrão: Veio na aula
+            present: true // Padrão: Veio no contraturno
         }));
 
         students.value = initialStudents;
@@ -62,7 +83,8 @@ const loadClassData = async () => {
         await loadWeeklyDates();
 
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar turma', life: 3000 });
+        console.error(error);
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados do contraturno', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -70,10 +92,10 @@ const loadClassData = async () => {
 
 // --- CARREGAR DATAS DA SEMANA ---
 const loadWeeklyDates = async () => {
-    if (!assignment.value) return;
+    if (!contraturno.value) return;
     
     try {
-        const res = await api.get(`attendance/weekly_dates/?subject=${assignment.value.subject}&classroom=${assignment.value.classroom}`);
+        const res = await api.get(`contraturno-attendances/weekly_dates/?contraturno_classroom=${contraturnoId}`);
         weeklyDates.value = res.data || [];
     } catch (e) {
         console.error("Erro ao carregar datas da semana", e);
@@ -83,15 +105,15 @@ const loadWeeklyDates = async () => {
 
 // --- VERIFICAR CHAMADA EXISTENTE ---
 const checkExistingAttendance = async () => {
-    if (!assignment.value) return;
+    if (!contraturno.value) return;
     
     const dateStr = formatDateForAPI(attendanceDate.value);
 
     try {
-        // Busca registros dessa matéria, nessa turma, nessa data
-        const res = await api.get(`attendance/?subject=${assignment.value.subject}&date=${dateStr}&enrollment__classroom=${assignment.value.classroom}`);
+        // Busca registros deste contraturno nesta data
+        const res = await api.get(`contraturno-attendances/by_contraturno/?contraturno_classroom=${contraturnoId}&date=${dateStr}`);
         
-        const existingRecords = res.data.results;
+        const existingRecords = res.data;
         attendanceRecorded.value = existingRecords.length > 0;
 
         // Atualiza o estado visual
@@ -141,7 +163,7 @@ const saveAttendance = async () => {
         const dateStr = formatDateForAPI(attendanceDate.value);
         
         const payload = {
-            subject: assignment.value.subject,
+            contraturno_classroom: parseInt(contraturnoId),
             date: dateStr,
             records: students.value.map(s => ({
                 enrollment_id: s.id,
@@ -149,9 +171,9 @@ const saveAttendance = async () => {
             }))
         };
 
-        await api.post('attendance/bulk_save/', payload);
+        await api.post('contraturno-attendances/bulk_save/', payload);
         
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Chamada salva!', life: 3000 });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Chamada do contraturno salva!', life: 3000 });
         
         // Marca como realizado
         attendanceRecorded.value = true;
@@ -161,7 +183,8 @@ const saveAttendance = async () => {
         await checkExistingAttendance();
         
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar chamada.', life: 3000 });
+        console.error(error);
+        toast.add({ severity: 'error', summary: 'Erro', detail: error.response?.data?.error || 'Erro ao salvar chamada.', life: 3000 });
     } finally {
         saving.value = false;
     }
@@ -172,7 +195,7 @@ const goBack = () => {
 };
 
 onMounted(() => {
-    loadClassData();
+    loadContraturnoData();
 });
 </script>
 
@@ -181,24 +204,24 @@ onMounted(() => {
         <div class="card">
             <Toast />
             
-            <div class="flex flex-col md:flex-row justify-between items-center mb-4" v-if="assignment">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-4" v-if="contraturno">
                 <div class="flex items-center mb-3 md:mb-0">
                     <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="goBack" />
                     <div>
-                        <span class="block text-xl font-bold">{{ assignment.subject_name }}</span>
-                        <span class="text-600">{{ assignment.classroom_name }}</span>
+                        <span class="block text-xl font-bold">Contraturno - {{ contraturno.classroom_name }}</span>
+                        <span class="text-600">{{ contraturno.contraturno_period_display }}</span>
                     </div>
                 </div>
 
                 <div class="flex flex-col md:flex-row items-center gap-3">
-                    <label class="block font-bold">Data da Aula:</label>
+                    <label class="block font-bold">Data:</label>
                     <DatePicker v-model="attendanceDate" dateFormat="dd/mm/yy" showIcon fluid />
                     <Button label="Salvar Chamada" icon="pi pi-check" :loading="saving" @click="saveAttendance" />
                 </div>
             </div>
 
             <!-- Calendário Semanal -->
-            <div v-if="assignment" class="mb-4">
+            <div v-if="contraturno" class="mb-4">
                 <WeeklyCalendar 
                     :attendance-dates="weeklyDates" 
                     :current-date="attendanceDate"
@@ -207,7 +230,7 @@ onMounted(() => {
             </div>
 
             <DataTable :value="students" :loading="loading" responsiveLayout="scroll" size="small" stripedRows>
-                <template #empty>Nenhum aluno nesta turma.</template>
+                <template #empty>Nenhum aluno de período integral nesta turma.</template>
 
                 <Column header="Aluno" sortable>
                     <template #body="slotProps">
@@ -247,8 +270,7 @@ onMounted(() => {
                 v-model:visible="statsDialogVisible"
                 :enrollment-id="selectedStudent?.id"
                 :student-name="selectedStudent?.student_name"
-                :subject-id="assignment?.subject"
-                :is-contraturno="false"
+                :is-contraturno="true"
             />
         </div>
     </div>

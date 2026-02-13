@@ -95,7 +95,7 @@ const loadPlans = async () => {
         totalRecords.value = data.count; // Total real do banco
     } catch (e) {
         console.error(e);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -126,11 +126,11 @@ const saveFeedback = async (status) => {
             status: status,
             coordinator_feedback: feedbackText.value
         });
-        toast.add({ severity: 'success', summary: 'Avaliado', detail: `Status definido como ${getStatusLabel(status)}` });
+        toast.add({ severity: 'success', summary: 'Avaliado', detail: `Status definido como ${getStatusLabel(status)}`, life: 3000 });
         reviewDialog.value = false;
         loadPlans();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar avaliação' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar avaliação', life: 3000 });
     }
 };
 
@@ -154,11 +154,11 @@ const unsubscribePlan = async () => {
 
     try {
         await api.post(`lesson-plans/${currentPlan.value.id}/unsubscribe/`);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Você deixou de acompanhar este plano.' });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Você deixou de acompanhar este plano.', life: 3000 });
         reviewDialog.value = false;
         loadPlans(); // Recarrega a lista (o plano deve sumir)
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao processar solicitação.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao processar solicitação.', life: 3000 });
     }
 };
 
@@ -171,13 +171,13 @@ const confirmUnsubscribe = () => {
 const executeUnsubscribe = async () => {
     try {
         await api.post(`lesson-plans/${currentPlan.value.id}/unsubscribe/`);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Você deixou de acompanhar este plano.' });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Você deixou de acompanhar este plano.', life: 3000 });
         
         unsubscribeDialog.value = false; // Fecha confirmação
         reviewDialog.value = false;      // Fecha o modal do plano
         loadPlans();                     // Atualiza a lista
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao processar solicitação.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao processar solicitação.', life: 3000 });
     }
 };
 </script>

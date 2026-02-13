@@ -25,7 +25,7 @@ const loadHistory = async () => {
         const res = await api.get(`academic-history/?student=${props.studentId}`);
         historyList.value = res.data.results || res.data;
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar histórico.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar histórico.', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -45,7 +45,7 @@ const openNew = () => {
 
 const editRecord = (item) => {
     if (item.is_virtual) {
-        toast.add({ severity: 'info', summary: 'Atual', detail: 'Este registro é automático da matrícula atual.' });
+        toast.add({ severity: 'info', summary: 'Atual', detail: 'Este registro é automático da matrícula atual.', life: 3000 });
         return;
     }
     record.value = { ...item };
@@ -56,22 +56,22 @@ const saveRecord = async () => {
     submitted.value = true;
 
     if (!record.value.year || !record.value.classroom_name) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Ano e Turma.' });
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Ano e Turma.', life: 3000 });
         return;
     }
 
     try {
         if (record.value.id) {
             await api.patch(`academic-history/${record.value.id}/`, record.value);
-            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Histórico salvo.' });
+            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Histórico salvo.', life: 3000 });
         } else {
             await api.post('academic-history/', record.value);
-            toast.add({ severity: 'success', summary: 'Criado', detail: 'Registro adicionado.' });
+            toast.add({ severity: 'success', summary: 'Criado', detail: 'Registro adicionado.', life: 3000 });
         }
         dialogVisible.value = false;
         loadHistory();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao salvar.', life: 3000 });
     }
 };
 
@@ -79,10 +79,10 @@ const deleteRecord = async (id) => {
     if (confirm('Remover este registro histórico?')) {
         try {
             await api.delete(`academic-history/${id}/`);
-            toast.add({ severity: 'success', summary: 'Removido', detail: 'Registro apagado.' });
+            toast.add({ severity: 'success', summary: 'Removido', detail: 'Registro apagado.', life: 3000 });
             loadHistory();
         } catch (e) {
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao remover.' });
+            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao remover.', life: 3000 });
         }
     }
 };

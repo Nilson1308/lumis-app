@@ -86,7 +86,9 @@ onMounted(() => {
             </div>
             <Divider/>
             <div class="text-xl font-bold p-4">{{ selectedReport.subject }}</div>
-            <div class="surface-100 p-4 mb-4" v-html="selectedReport.content" style="max-height: 320px; overflow-wrap: break-word;"></div>
+            <ScrollPanel style="width: 100%; height: 320px">
+                <div class="surface-100 p-4 mb-4" v-html="selectedReport.content"></div>
+            </ScrollPanel>
             <Divider/>
             <div class="grid grid-cols-12 gap-4">
                 <div class="col-span-12 xl:col-span-6">

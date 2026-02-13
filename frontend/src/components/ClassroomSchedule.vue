@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
@@ -11,7 +11,8 @@ import interactionPlugin from '@fullcalendar/interaction';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
 
 const props = defineProps({
-    classroomId: { type: [String, Number], required: true }
+    classroomId: { type: [String, Number], required: true },
+    readOnly: { type: Boolean, default: false }
 });
 
 const toast = useToast();
@@ -27,27 +28,50 @@ const newSchedule = ref({
     end_time: null
 });
 
-const calendarOptions = ref({
+// Detecção de mobile
+const isMobile = ref(window.innerWidth < 768);
+
+const updateMobile = () => {
+    isMobile.value = window.innerWidth < 768;
+};
+
+onMounted(() => {
+    window.addEventListener('resize', updateMobile);
+    updateMobile();
+});
+
+onUnmounted(() => {
+    window.removeEventListener('resize', updateMobile);
+});
+
+const calendarOptions = computed(() => ({
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin],
-    initialView: 'timeGridWeek',
+    initialView: isMobile.value ? 'listWeek' : 'timeGridWeek',
     locale: ptBrLocale,
     headerToolbar: false,
-    dayHeaderFormat: { weekday: 'long' },
+    dayHeaderFormat: isMobile.value ? { weekday: 'short' } : { weekday: 'long' },
     allDaySlot: false,
     slotMinTime: '07:00:00',
     slotMaxTime: '18:00:00',
     weekends: false,
     slotDuration: '00:15:00', 
-    slotLabelInterval: '01:00',
+    slotLabelInterval: isMobile.value ? '02:00' : '01:00',
     expandRows: true,
-    height: 'auto',
+    height: isMobile.value ? 'auto' : undefined,
+    aspectRatio: isMobile.value ? 1.0 : 1.8,
     selectMirror: true,
-    selectable: true,
+    selectable: !props.readOnly,
     editable: false, 
     select: (info) => handleDateSelect(info),
     eventClick: (info) => handleEventClick(info),
-    events: events
-});
+    events: events.value,
+    eventDisplay: 'block',
+    eventTimeFormat: {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }
+}));
 
 const loadSchedule = async () => {
     loading.value = true;
@@ -64,7 +88,7 @@ const loadSchedule = async () => {
             extendedProps: { ...item }
         }));
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar grade.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar grade.', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -94,6 +118,8 @@ const loadAssignments = async () => {
 };
 
 const handleDateSelect = (selectInfo) => {
+    if (props.readOnly) return; // Não permite selecionar se for somente leitura
+    
     const start = selectInfo.start;
     const end = selectInfo.end;
     
@@ -120,11 +146,11 @@ const formatTime = (date) => {
 
 const saveClass = async () => {
     if (!newSchedule.value.assignment) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione a matéria.' });
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione a matéria.', life: 3000 });
         return;
     }
     if (!newSchedule.value.start_time || !newSchedule.value.end_time) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Defina início e fim.' });
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Defina início e fim.', life: 3000 });
         return;
     }
 
@@ -137,20 +163,22 @@ const saveClass = async () => {
 
     try {
         await api.post('schedules/', payload);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aula agendada!' });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aula agendada!', life: 3000 });
         dialogVisible.value = false;
         loadSchedule();
     } catch (e) {
         const msg = e.response?.data?.non_field_errors?.[0] || 'Erro ao salvar. Verifique choque de horário.';
-        toast.add({ severity: 'error', summary: 'Erro', detail: msg });
+        toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 3000 });
     }
 };
 
 const handleEventClick = (clickInfo) => {
+    if (props.readOnly) return; // Não permite deletar se for somente leitura
+    
     if (confirm(`Remover aula de ${clickInfo.event.title}?`)) {
         api.delete(`schedules/${clickInfo.event.id}/`)
             .then(() => {
-                toast.add({ severity: 'success', summary: 'Removido', detail: 'Aula removida.' });
+                toast.add({ severity: 'success', summary: 'Removido', detail: 'Aula removida.', life: 3000 });
                 clickInfo.event.remove();
             });
     }
@@ -166,9 +194,15 @@ onMounted(() => {
 
 <template>
     <div class="card p-0 overflow-hidden surface-0">
+        <div v-if="readOnly" class="p-3 bg-blue-50 border-round-top">
+            <div class="flex align-items-center gap-2 text-blue-700">
+                <i class="pi pi-info-circle"></i>
+                <span class="text-sm font-medium">Modo somente leitura - Professores não podem editar a grade horária</span>
+            </div>
+        </div>
         <FullCalendar :options="calendarOptions" class="p-3" />
 
-        <Dialog v-model:visible="dialogVisible" header="Configurar Aula" :modal="true" :style="{ width: '450px' }" class="p-fluid">
+        <Dialog v-model:visible="dialogVisible" header="Configurar Aula" :modal="true" :style="{ width: isMobile ? '95vw' : '450px', maxWidth: '450px' }" class="p-fluid">
             <div class="field mb-3">
                 <label class="font-bold">Matéria / Professor</label>
                 <Dropdown 
@@ -228,9 +262,46 @@ onMounted(() => {
 .fc .fc-timegrid-slot {
     height: 2.5em !important; 
 }
+
 .fc-event-main {
     padding: 2px 4px;
     font-size: 0.85rem;
     font-weight: 500;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .fc {
+        font-size: 0.75rem !important;
+    }
+    
+    .fc .fc-timegrid-slot {
+        height: 2em !important;
+    }
+    
+    .fc-event-main {
+        padding: 1px 2px;
+        font-size: 0.7rem;
+        line-height: 1.2;
+    }
+    
+    .fc .fc-list-event {
+        font-size: 0.85rem;
+    }
+    
+    .fc .fc-list-event-time {
+        font-size: 0.75rem;
+    }
+    
+    .fc-toolbar-title {
+        font-size: 1rem !important;
+    }
+}
+
+/* Tablet optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .fc {
+        font-size: 0.85rem !important;
+    }
 }
 </style>

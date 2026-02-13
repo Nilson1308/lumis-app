@@ -1,10 +1,13 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/service/api';
 import { useToast } from 'primevue/usetoast';
+import { useAuthStore } from '@/stores/auth';
 import StudentViewDialog from '@/components/StudentViewDialog.vue';
 import ClassroomSchedule from '@/components/ClassroomSchedule.vue';
+
+const authStore = useAuthStore();
 
 // Import necessário para navegar para o aluno futuramente
 const route = useRoute();
@@ -30,7 +33,7 @@ const loadDashboard = async () => {
         const response = await api.get(`classrooms/${classroomId}/dashboard/`);
         data.value = response.data;
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar turma.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar turma.', life: 3000 });
         router.push('classrooms');
     } finally {
         loading.value = false;
@@ -38,7 +41,12 @@ const loadDashboard = async () => {
 };
 
 const goBack = () => {
-    router.push('/classrooms');
+    // Se for professor, volta para minhas turmas, senão para lista de turmas
+    if (authStore.isTeacher && !authStore.isCoordinator && !authStore.isAdmin) {
+        router.push('/teacher/classes');
+    } else {
+        router.push('/classrooms');
+    }
 };
 
 const openStudent = (studentId) => {
@@ -173,6 +181,7 @@ onMounted(() => {
                     <TabPanel header="Grade Horária">
                         <ClassroomSchedule 
                             :classroomId="data.classroom.id" 
+                            :readOnly="authStore.isTeacher && !authStore.isCoordinator && !authStore.isAdmin"
                             v-if="activeTab === 2 && data.classroom.id" 
                         />
                     </TabPanel>

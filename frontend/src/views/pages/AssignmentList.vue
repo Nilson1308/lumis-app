@@ -44,7 +44,7 @@ const loadDependencies = async () => {
         }));
     } catch (e) {
         console.error(e);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar listas.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar listas.', life: 3000 });
     }
 };
 
@@ -71,7 +71,7 @@ const fetchAssignments = async () => {
 
     } catch (e) {
         console.error(e);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar atribuições.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar atribuições.', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -109,7 +109,7 @@ const clearFilters = () => {
 
 // --- AÇÕES CRUD ---
 const openNew = () => {
-    assignment.value = {};
+    assignment.value = { teacher: null, subject: null, classrooms: [] };
     submitted.value = false;
     assignmentDialog.value = true;
 };
@@ -136,32 +136,61 @@ const confirmDeleteAssignment = (item) => {
 
 const saveAssignment = async () => {
     submitted.value = true;
-    if (!assignment.value.teacher || !assignment.value.classroom || !assignment.value.subject) return;
 
-    try {
-        if (assignment.value.id) {
+    if (assignment.value.id) {
+        if (!assignment.value.teacher || !assignment.value.classroom || !assignment.value.subject) return;
+        try {
             await api.put(`assignments/${assignment.value.id}/`, assignment.value);
-            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado com sucesso' });
-        } else {
-            await api.post('assignments/', assignment.value);
-            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado com sucesso' });
+            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Atualizado com sucesso', life: 3000 });
+            assignmentDialog.value = false;
+            fetchAssignments();
+        } catch (e) {
+            const msg = e.response?.data?.non_field_errors?.[0] || 'Erro ao salvar.';
+            toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 3000 });
         }
-        assignmentDialog.value = false;
-        fetchAssignments(); // Recarrega a lista
-    } catch (e) {
-        const msg = e.response?.data?.non_field_errors?.[0] || 'Erro ao salvar.';
-        toast.add({ severity: 'error', summary: 'Erro', detail: msg });
+    } else {
+        const classrooms = assignment.value.classrooms;
+        if (!assignment.value.teacher || !assignment.value.subject || !classrooms?.length) return;
+
+        try {
+            let created = 0;
+            let errors = [];
+            for (const classroomId of classrooms) {
+                try {
+                    await api.post('assignments/', {
+                        teacher: assignment.value.teacher,
+                        subject: assignment.value.subject,
+                        classroom: classroomId
+                    });
+                    created++;
+                } catch (e) {
+                    const msg = e.response?.data?.non_field_errors?.[0] || e.response?.data?.detail || 'Erro';
+                    errors.push(msg);
+                }
+            }
+            assignmentDialog.value = false;
+            fetchAssignments();
+            if (created > 0) {
+                toast.add({ severity: 'success', summary: 'Sucesso', detail: `${created} atribuição(ões) criada(s).`, life: 3000 });
+            }
+            if (errors.length > 0) {
+                toast.add({ severity: 'warn', summary: 'Atenção', detail: errors.slice(0, 2).join(' '), life: 6000 });
+            }
+        } catch (e) {
+            const msg = e.response?.data?.non_field_errors?.[0] || 'Erro ao salvar.';
+            toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 3000 });
+        }
     }
 };
 
 const deleteAssignment = async () => {
     try {
         await api.delete(`assignments/${assignment.value.id}/`);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido com sucesso' });
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido com sucesso', life: 3000 });
         deleteAssignmentDialog.value = false;
         fetchAssignments(); // Recarrega a lista
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir', life: 3000 });
     }
 };
 
@@ -197,7 +226,7 @@ onMounted(() => {
                 <template #header>
                     <div class="flex flex-col gap-3">
                         <div class="flex flex-wrap gap-2 items-center justify-between">
-                            <h4 class="m-0">Grade de Aulas</h4>
+                            <h4 class="m-0">Atribuições de Aulas</h4>
                             <IconField>
                                 <InputIcon>
                                     <i class="pi pi-search" />
@@ -241,12 +270,32 @@ onMounted(() => {
                 </Column>
             </DataTable>
 
-            <Dialog v-model:visible="assignmentDialog" :style="{ width: '450px' }" :header="assignment.id ? 'Editar Atribuição' : 'Nova Atribuição'" :modal="true" class="p-fluid">
+            <Dialog v-model:visible="assignmentDialog" :style="{ width: '450px' }" :header="assignment.id ? 'Editar Atribuição' : 'Nova Atribuição (múltiplas turmas)'" :modal="true" class="p-fluid">
                 
                 <div class="mb-3">
-                    <label class="block font-bold mb-2">Turma</label>
-                    <Dropdown v-model="assignment.classroom" :options="classrooms" optionLabel="name" optionValue="id" placeholder="Selecione..." filter fluid />
-                    <small class="p-error" v-if="submitted && !assignment.classroom">Obrigatório.</small>
+                    <label class="block font-bold mb-2">Turma{{ assignment.id ? '' : 's' }}</label>
+                    <Dropdown
+                        v-if="assignment.id"
+                        v-model="assignment.classroom"
+                        :options="classrooms"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Selecione..."
+                        filter
+                        fluid
+                    />
+                    <MultiSelect
+                        v-else
+                        v-model="assignment.classrooms"
+                        :options="classrooms"
+                        optionLabel="name"
+                        optionValue="id"
+                        placeholder="Selecione uma ou mais turmas"
+                        filter
+                        display="chip"
+                        fluid
+                    />
+                    <small class="p-error" v-if="submitted && (assignment.id ? !assignment.classroom : !assignment.classrooms?.length)">Obrigatório.</small>
                 </div>
 
                 <div class="mb-3">

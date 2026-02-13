@@ -73,7 +73,7 @@ const loadData = async () => {
 
     } catch (e) {
         console.error("Erro ao carregar:", e);
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha na conexão' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha na conexão', life: 3000 });
     } finally {
         loading.value = false;
     }

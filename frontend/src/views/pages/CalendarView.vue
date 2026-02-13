@@ -1,15 +1,15 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import { useAuthStore } from '@/stores/auth';
 import api from '@/service/api';
-// ... imports do FullCalendar mantidos ...
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import listPlugin from '@fullcalendar/list';
 import ptBrLocale from '@fullcalendar/core/locales/pt-br';
+import Calendar from 'primevue/calendar';
 
 const toast = useToast();
 const authStore = useAuthStore();
@@ -54,23 +54,67 @@ const isEditable = computed(() => {
     return false;
 });
 
+// Verifica se o usuário pode EDITAR um evento (para cor diferente quando só leitura)
+function canEditEvent(eventProps) {
+    if (!eventProps) return false;
+    const user = authStore.user;
+    if (!user) return false;
+    if (authStore.isAdmin || authStore.isCoordinator) return true;
+    if (authStore.isSecretary) {
+        if (['EXAM', 'ASSIGNMENT'].includes(eventProps.event_type)) {
+            return eventProps.created_by === user.id;
+        }
+        return true;
+    }
+    if (authStore.isTeacher) return eventProps.created_by === user.id;
+    return false; // Responsáveis: só leitura
+}
+
+// Detecção de mobile
+const isMobile = ref(window.innerWidth < 768);
+
+const updateMobile = () => {
+    isMobile.value = window.innerWidth < 768;
+};
+
+onMounted(() => {
+    window.addEventListener('resize', updateMobile);
+    updateMobile();
+});
+
+onUnmounted(() => {
+    window.removeEventListener('resize', updateMobile);
+});
+
 // --- FULLCALENDAR OPTIONS ---
-const calendarOptions = ref({
+const calendarOptions = computed(() => ({
     plugins: [dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin],
-    initialView: 'timeGridWeek',
+    initialView: isMobile.value ? 'listWeek' : 'timeGridWeek',
     locale: ptBrLocale,
-    headerToolbar: {
+    headerToolbar: isMobile.value ? {
+        left: 'prev,next',
+        center: 'title',
+        right: ''
+    } : {
         left: 'prev,next today',
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,listMonth'
     },
-    editable: false, // Desliguei o drag&drop global para evitar confusão de permissão
+    height: isMobile.value ? 'auto' : undefined,
+    aspectRatio: isMobile.value ? 1.2 : 1.8,
+    editable: false,
     selectable: true,
     dayMaxEvents: true,
     select: handleDateSelect,
     eventClick: handleEventClick,
-    events: fetchEventsFromApi
-});
+    events: fetchEventsFromApi,
+    eventDisplay: 'block',
+    eventTimeFormat: {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }
+}));
 
 // --- API ---
 async function fetchEventsFromApi(info, successCallback, failureCallback) {
@@ -80,21 +124,30 @@ async function fetchEventsFromApi(info, successCallback, failureCallback) {
         });
         
         const mappedEvents = response.data.map(e => {
+            // Cores por tipo
             let color = '#3788d8';
             if (e.event_type === 'HOLIDAY') color = '#ef4444';
             if (e.event_type === 'EXAM') color = '#f59e0b';
             if (e.event_type === 'SCHOOL_DAY') color = '#22c55e';
-            
-            // Destaque visual para o Professor: Se é meu, borda mais grossa ou cor diferente?
-            // Por enquanto mantemos padrão.
-            
+
+            // Quando o usuário só pode LER (regra de negócio), usa cor mais suave
+            const readOnly = !canEditEvent(e);
+            if (readOnly) {
+                color = '#9ca3af'; // cinza para eventos somente leitura
+            }
+
+            const isHoliday = e.event_type === 'HOLIDAY';
+            const startStr = e.start_time || '';
+            const endStr = e.end_time || '';
+
             return {
                 id: e.id,
                 title: e.title,
-                start: e.start_time,
-                end: e.end_time,
-                color: color,
-                extendedProps: { ...e } 
+                start: isHoliday ? startStr.split('T')[0] : startStr,
+                end: isHoliday ? (endStr ? endStr.split('T')[0] : startStr.split('T')[0]) : endStr,
+                allDay: isHoliday, // Feriados = dia todo
+                color,
+                extendedProps: { ...e }
             };
         });
         successCallback(mappedEvents);
@@ -118,7 +171,63 @@ const loadDependencies = async () => {
     }
 };
 
+// Indica se o evento é feriado (para usar formulário só data, sem horário)
+const isHolidayEvent = computed(() => selectedEvent.value.event_type === 'HOLIDAY');
+
+// Data para feriado (dia todo) - computed para dois vias
+const holidayDate = computed({
+    get() {
+        const s = selectedEvent.value?.start_time;
+        if (!s) return null;
+        return s instanceof Date ? s : new Date(s);
+    },
+    set(val) {
+        if (!val || !selectedEvent.value) return;
+        const d = val instanceof Date ? val : new Date(val);
+        const dateStr = d.toISOString().split('T')[0];
+        selectedEvent.value.start_time = `${dateStr}T00:00:00`;
+        selectedEvent.value.end_time = `${dateStr}T23:59:59`;
+    }
+});
+
+// Datas com horário para Início e Fim - Calendar precisa de Date para formatar dd/mm/yyyy - HH:mm
+const startTimeDate = computed({
+    get() {
+        const s = selectedEvent.value?.start_time;
+        if (!s) return null;
+        return s instanceof Date ? s : new Date(s);
+    },
+    set(val) {
+        if (!selectedEvent.value) return;
+        selectedEvent.value.start_time = val ? (val instanceof Date ? val.toISOString() : new Date(val).toISOString()) : null;
+    }
+});
+const endTimeDate = computed({
+    get() {
+        const s = selectedEvent.value?.end_time;
+        if (!s) return null;
+        return s instanceof Date ? s : new Date(s);
+    },
+    set(val) {
+        if (!selectedEvent.value) return;
+        selectedEvent.value.end_time = val ? (val instanceof Date ? val.toISOString() : new Date(val).toISOString()) : null;
+    }
+});
+
 // --- HANDLERS ---
+function openNewEvent() {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    selectedEvent.value = {
+        title: '',
+        start_time: `${today}T08:00:00`,
+        end_time: `${today}T18:00:00`,
+        event_type: 'EVENT',
+        target_audience: 'ALL'
+    };
+    eventDialog.value = true;
+}
+
 function handleDateSelect(selectInfo) {
     if (!canCreate.value) return; // Pais clicam na data e nada acontece
 
@@ -134,40 +243,79 @@ function handleDateSelect(selectInfo) {
 
 function handleEventClick(clickInfo) {
     const props = clickInfo.event.extendedProps;
+    let startTime = props.start_time || '';
+    let endTime = props.end_time || '';
+    // Feriados podem vir sem hora; garante formato
+    if (props.event_type === 'HOLIDAY') {
+        if (startTime && startTime.length === 10) startTime += 'T00:00:00';
+        if (endTime && endTime.length === 10) endTime += 'T23:59:59';
+    }
     selectedEvent.value = {
         id: clickInfo.event.id,
         title: clickInfo.event.title,
-        start_time: props.start_time,
-        end_time: props.end_time,
+        start_time: startTime,
+        end_time: endTime,
         event_type: props.event_type,
         target_audience: props.target_audience,
         classroom: props.classroom,
         subject: props.subject,
         description: props.description,
-        created_by: props.created_by // <--- Importante recuperar aqui
+        created_by: props.created_by
     };
     eventDialog.value = true;
+}
+
+// Quando mudar para HOLIDAY, ajusta para dia todo
+watch(() => selectedEvent.value.event_type, (newType) => {
+    if (newType === 'HOLIDAY' && selectedEvent.value.start_time) {
+        const datePart = selectedEvent.value.start_time.split('T')[0] || selectedEvent.value.start_time.substring(0, 10);
+        selectedEvent.value.start_time = `${datePart}T00:00:00`;
+        selectedEvent.value.end_time = `${datePart}T23:59:59`;
+    }
+}, { flush: 'post' });
+
+// Helpers para converter entre Date e string ISO
+function toDate(val) {
+    if (!val) return null;
+    if (val instanceof Date) return val;
+    if (typeof val === 'string') return new Date(val);
+    return null;
+}
+function toISOString(val) {
+    const d = toDate(val);
+    return d ? d.toISOString() : '';
 }
 
 const saveEvent = async () => {
     loading.value = true;
     try {
         const payload = { ...selectedEvent.value };
-        if (payload.start_time.length === 10) payload.start_time += 'T08:00:00';
-        if (payload.end_time && payload.end_time.length === 10) payload.end_time += 'T18:00:00';
+        const start = toDate(payload.start_time);
+        const end = toDate(payload.end_time);
+
+        if (payload.event_type === 'HOLIDAY') {
+            // Feriado = dia todo: início 00:00, fim 23:59
+            const dateStr = start ? start.toISOString().split('T')[0] : payload.start_time?.split('T')[0];
+            payload.start_time = `${dateStr}T00:00:00`;
+            payload.end_time = `${dateStr}T23:59:59`;
+        } else {
+            payload.start_time = toISOString(start) || payload.start_time;
+            payload.end_time = toISOString(end) || payload.end_time;
+            if (payload.start_time && payload.start_time.length === 10) payload.start_time += 'T08:00:00';
+            if (payload.end_time && payload.end_time.length === 10) payload.end_time += 'T18:00:00';
+        }
 
         if (payload.id) {
             await api.put(`calendar/${payload.id}/`, payload);
-            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Evento atualizado!' });
+            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Evento atualizado!', life: 3000 });
         } else {
             await api.post('calendar/', payload);
-            toast.add({ severity: 'success', summary: 'Criado', detail: 'Evento criado!' });
+            toast.add({ severity: 'success', summary: 'Criado', detail: 'Evento criado!', life: 3000 });
         }
         eventDialog.value = false;
         window.location.reload();
     } catch (e) {
-        // Se o backend bloquear (403), mostramos aqui
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Você não tem permissão para alterar este evento.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Você não tem permissão para alterar este evento.', life: 3000 });
     } finally {
         loading.value = false;
     }
@@ -176,12 +324,12 @@ const saveEvent = async () => {
 const deleteEvent = async () => {
     try {
         await api.delete(`calendar/${selectedEvent.value.id}/`);
-        toast.add({ severity: 'success', summary: 'Removido', detail: 'Evento excluído.' });
+        toast.add({ severity: 'success', summary: 'Removido', detail: 'Evento excluído.', life: 3000 });
         eventDialog.value = false;
         deleteDialog.value = false;
         window.location.reload();
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao excluir.', life: 3000 });
     }
 };
 
@@ -208,7 +356,16 @@ onMounted(() => loadDependencies());
 <template>
     <div class="card">
         <Toast />
-        <h2 class="text-2xl font-bold mb-4 text-primary">Calendário Acadêmico</h2>
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold text-primary m-0">Calendário Acadêmico</h2>
+            <Button
+                v-if="canCreate"
+                label="Novo Evento"
+                icon="pi pi-plus"
+                class="p-button-primary"
+                @click="openNewEvent"
+            />
+        </div>
 
         <FullCalendar :options="calendarOptions" />
 
@@ -217,7 +374,7 @@ onMounted(() => loadDependencies());
             :header="selectedEvent.id ? (isEditable ? 'Editar Evento' : 'Detalhes do Evento') : 'Novo Evento'" 
             :modal="true" 
             class="p-fluid" 
-            :style="{ width: '700px' }"
+            :style="{ width: isMobile ? '95vw' : '700px', maxWidth: '700px' }"
         >
             
             <div v-if="isEditable">
@@ -235,7 +392,43 @@ onMounted(() => loadDependencies());
                         <Dropdown v-model="selectedEvent.target_audience" :options="targetAudiences" optionLabel="label" optionValue="value" fluid />
                     </div>
                 </div>
-                <div v-if="['EXAM', 'ASSIGNMENT', 'CLASSROOM'].includes(selectedEvent.event_type) || selectedEvent.target_audience === 'CLASSROOM'" class="grid grid-cols-12 gap-4 mb-2">
+                <!-- Feriado = dia todo (só data) -->
+                <div v-if="isHolidayEvent" class="grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-12">
+                        <label class="block font-bold mb-1">Data (dia todo)</label>
+                        <Calendar v-model="holidayDate" dateFormat="dd/mm/yyyy" locale="pt-BR" showIcon fluid />
+                    </div>
+                </div>
+                <!-- Outros tipos = data + horário -->
+                <div v-else class="grid grid-cols-12 gap-4 mb-2">
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="block font-bold mb-1">Início</label>
+                        <Calendar
+                            v-model="startTimeDate"
+                            showTime
+                            hourFormat="24"
+                            dateFormat="dd/mm/yyyy - HH:mm"
+                            timeFormat="24"
+                            locale="pt-BR"
+                            showIcon
+                            fluid
+                        />
+                    </div>
+                    <div class="col-span-12 xl:col-span-6">
+                        <label class="block font-bold mb-1">Fim</label>
+                        <Calendar
+                            v-model="endTimeDate"
+                            showTime
+                            hourFormat="24"
+                            dateFormat="dd/mm/yyyy - HH:mm"
+                            timeFormat="24"
+                            locale="pt-BR"
+                            showIcon
+                            fluid
+                        />
+                    </div>
+                </div>
+                <div v-if="['EXAM', 'ASSIGNMENT'].includes(selectedEvent.event_type) || selectedEvent.target_audience === 'CLASSROOM'" class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-6">
                         <label class="block font-bold mb-1">Turma</label>
                         <Dropdown v-model="selectedEvent.classroom" :options="classrooms" optionLabel="name" optionValue="id" filter fluid />

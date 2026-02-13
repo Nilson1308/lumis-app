@@ -20,11 +20,11 @@ const token = route.params.token;
 
 const handleReset = async () => {
     if (password.value !== confirmPassword.value) {
-        toast.add({ severity: 'warn', summary: 'Erro', detail: 'As senhas não coincidem.' });
+        toast.add({ severity: 'warn', summary: 'Erro', detail: 'As senhas não coincidem.', life: 3000 });
         return;
     }
     if (password.value.length < 6) {
-        toast.add({ severity: 'warn', summary: 'Erro', detail: 'A senha deve ter no mínimo 6 caracteres.' });
+        toast.add({ severity: 'warn', summary: 'Erro', detail: 'A senha deve ter no mínimo 6 caracteres.', life: 3000 });
         return;
     }
 
@@ -43,7 +43,7 @@ const handleReset = async () => {
         }, 2000);
         
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Link inválido ou expirado.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Link inválido ou expirado.', life: 3000 });
     } finally {
         loading.value = false;
     }

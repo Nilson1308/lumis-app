@@ -97,6 +97,30 @@ const router = createRouter({
                     name: 'assignments',
                     component: () => import('@/views/pages/AssignmentList.vue')
                 },
+                {
+                    path: '/extra-activities',
+                    name: 'extra-activities',
+                    component: () => import('@/views/pages/ExtraActivitiesList.vue'),
+                    meta: { breadcrumb: 'Atividades Extras' }
+                },
+                {
+                    path: '/extra-activity-enrollments',
+                    name: 'extra-activity-enrollments',
+                    component: () => import('@/views/pages/ExtraActivityEnrollmentsList.vue'),
+                    meta: { breadcrumb: 'Matrículas em Atividades' }
+                },
+                {
+                    path: '/contraturnos',
+                    name: 'contraturnos-list',
+                    component: () => import('@/views/pages/ContraturnoList.vue'),
+                    meta: { breadcrumb: 'Contraturnos' }
+                },
+                {
+                    path: '/checklist-configs',
+                    name: 'checklist-configs',
+                    component: () => import('@/views/pages/ChecklistConfigList.vue'),
+                    meta: { breadcrumb: 'Configuração de Checklist' }
+                },
 
                 // --- PORTAL DO PROFESSOR ---
                 {
@@ -118,6 +142,16 @@ const router = createRouter({
                     path: '/teacher/classes/:id/attendance',
                     name: 'class-attendance',
                     component: () => import('@/views/pages/teacher/AttendanceClass.vue')
+                },
+                {
+                    path: '/teacher/contraturnos/:id/attendance',
+                    name: 'contraturno-attendance',
+                    component: () => import('@/views/pages/teacher/ContraturnoAttendance.vue')
+                },
+                {
+                    path: '/teacher/classes/:id/checklist',
+                    name: 'student-checklist',
+                    component: () => import('@/views/pages/teacher/StudentChecklist.vue')
                 },
                 {
                     path: '/teacher/classes/:id/diary', 

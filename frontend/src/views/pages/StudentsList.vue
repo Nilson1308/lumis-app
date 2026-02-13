@@ -48,7 +48,7 @@ const loadData = async () => {
         students.value = res.data.results; 
         totalRecords.value = res.data.count;
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar dados', life: 3000 });
     } finally {
         loading.value = false;
     }

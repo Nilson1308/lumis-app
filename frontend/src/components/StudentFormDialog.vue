@@ -27,7 +27,7 @@ const student = ref({
     zip_code: '', street: '', number: '', complement: '', neighborhood: '', city: 'Mogi das Cruzes', state: 'SP',
     period: 'AFTERNOON', is_full_time: false, meals: 'NONE',
     allergies: '', medications: '', emergency_contact: '',
-    guardians: [], extra_activities: [],
+    guardians: [],
     photo_preview: null // Apenas visual
 });
 
@@ -40,7 +40,6 @@ const mealOptions = [
     { label: 'Almoço + Lanche', value: 'BOTH' }
 ];
 const guardians = ref([]);
-const extraActivities = ref([]);
 
 // --- WATCHERS ---
 watch(() => props.visible, async (val) => {
@@ -65,12 +64,8 @@ watch(localVisible, (val) => {
 // --- CARREGAMENTO DE DADOS ---
 const loadAuxiliaryData = async () => {
     try {
-        const [gRes, eRes] = await Promise.all([
-            api.get('guardians/'),
-            api.get('extra-activities/')
-        ]);
+        const gRes = await api.get('guardians/');
         guardians.value = gRes.data.results.map(g => ({ id: g.id, label: `${g.name} (CPF: ${g.cpf})` }));
-        extraActivities.value = eRes.data.results || eRes.data;
     } catch (e) {
         console.error("Erro ao carregar auxiliares", e);
     }
@@ -80,7 +75,7 @@ const resetForm = () => {
     student.value = {
         name: '', registration_number: '', ra: '', nationality: 'Brasileira', city: 'Mogi das Cruzes', state: 'SP',
         period: 'AFTERNOON', is_full_time: false, meals: 'NONE',
-        guardians: [], extra_activities: [], photo_preview: null
+        guardians: [], photo_preview: null
     };
 };
 
@@ -92,7 +87,7 @@ const loadStudent = async (id) => {
         if (data.birth_date) data.birth_date = new Date(data.birth_date);
         student.value = data;
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar aluno.' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar aluno.', life: 3000 });
         localVisible.value = false;
     }
 };
@@ -140,7 +135,7 @@ const saveStudent = async () => {
     submitted.value = true;
 
     if (!student.value.name || !student.value.registration_number) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Nome e Matrícula.' });
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha Nome e Matrícula.', life: 3000 });
         return;
     }
 
@@ -161,8 +156,6 @@ const saveStudent = async () => {
 
     // Arrays
     if (student.value.guardians) student.value.guardians.forEach(id => formData.append('guardians', id));
-    if (student.value.extra_activities) student.value.extra_activities.forEach(id => formData.append('extra_activities', id));
-
     // Arquivos
     if (student.value.medical_report instanceof File) formData.append('medical_report', student.value.medical_report);
     if (student.value.prescription instanceof File) formData.append('prescription', student.value.prescription);
@@ -172,17 +165,17 @@ const saveStudent = async () => {
         const config = { headers: { 'Content-Type': 'multipart/form-data' } };
         if (student.value.id) {
             await api.patch(`students/${student.value.id}/`, formData, config);
-            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Prontuário salvo.' });
+            toast.add({ severity: 'success', summary: 'Atualizado', detail: 'Prontuário salvo.', life: 3000 });
         } else {
             await api.post('students/', formData, config);
-            toast.add({ severity: 'success', summary: 'Criado', detail: 'Aluno matriculado.' });
+            toast.add({ severity: 'success', summary: 'Criado', detail: 'Aluno matriculado.', life: 3000 });
         }
         emit('saved'); // Avisa o pai para recarregar a lista
         localVisible.value = false;
     } catch (e) {
         console.error(e);
         const msg = e.response?.data?.registration_number ? 'Matrícula já existe.' : 'Erro ao salvar.';
-        toast.add({ severity: 'error', summary: 'Erro', detail: msg });
+        toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 3000 });
     }
 };
 </script>
@@ -281,8 +274,7 @@ const saveStudent = async () => {
                             <Dropdown v-model="student.meals" :options="mealOptions" optionLabel="label" optionValue="value" fluid />
                         </div>
                         <div class="col-span-12">
-                            <label class="block font-bold mb-3">Atividades Extras</label>
-                            <MultiSelect v-model="student.extra_activities" :options="extraActivities" optionLabel="name" optionValue="id" display="chip" filter fluid />
+                            <small class="text-color-secondary">Matrículas em atividades extracurriculares são gerenciadas no módulo <strong>Atividades Extras</strong>.</small>
                         </div>
                     </div>
                 </TabPanel>

@@ -44,7 +44,7 @@ const loadData = async () => {
         guardians.value = response.data.results;
         totalRecords.value = response.data.count; 
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar responsáveis' });
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar responsáveis', life: 3000 });
     } finally {
         loading.value = false;
     }
