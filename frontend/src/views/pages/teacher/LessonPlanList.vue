@@ -120,13 +120,13 @@ const editPlan = (item) => {
     planDialog.value = true;
 };
 
-// --- NOVA LÓGICA DE UPLOAD (Múltiplos + Validação) ---
+// --- UPLOAD: máx 5 arquivos, 5MB total ---
+const MAX_FILE_COUNT = 5;
+const MAX_TOTAL_SIZE = 5 * 1024 * 1024; // 5 MB (soma de todos os arquivos)
+
 const onFileSelect = (event) => {
     const files = event.files;
-    const maxFileSize = 2 * 1024 * 1024; // 2 MB
-    const maxFileCount = 5;
-    
-    // Extensões permitidas (em minúsculas para comparação)
+
     const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png'];
     const allowedMimeTypes = [
         'application/pdf',
@@ -141,138 +141,95 @@ const onFileSelect = (event) => {
         'image/png'
     ];
 
-    if (!files || files.length === 0) {
-        return;
-    }
+    if (!files || files.length === 0) return;
 
     // 1. Validação de Quantidade
-    if (newAttachments.value.length + files.length > maxFileCount) {
-        toast.add({ 
-            severity: 'error', 
-            summary: 'Limite de Arquivos Excedido', 
-            detail: `Você pode anexar no máximo ${maxFileCount} arquivos. Você já tem ${newAttachments.value.length} arquivo(s) selecionado(s).`, 
-            life: 6000 
+    if (newAttachments.value.length + files.length > MAX_FILE_COUNT) {
+        toast.add({
+            severity: 'error',
+            summary: 'Limite de Arquivos Excedido',
+            detail: `Você pode anexar no máximo ${MAX_FILE_COUNT} arquivos. Você já tem ${newAttachments.value.length} arquivo(s) selecionado(s).`,
+            life: 6000
         });
-        if (fileUploadRef.value && fileUploadRef.value.clear) {
-            fileUploadRef.value.clear();
-        }
+        if (fileUploadRef.value?.clear) fileUploadRef.value.clear();
         return;
     }
 
-    // 2. Validação de Tamanho e Extensão (Arquivo por Arquivo)
+    // 2. Validação de Extensão (arquivo por arquivo)
     const invalidFiles = [];
-    
     for (let file of files) {
-        let fileError = null;
-        
-        // Validação de tamanho
-        if (file.size > maxFileSize) {
-            const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-            fileError = {
-                name: file.name,
-                reason: 'size',
-                message: `O arquivo "${file.name}" excede o limite de 2MB. Tamanho atual: ${fileSizeMB} MB`
-            };
-        } else {
-            // Validação de extensão
-            const fileName = file.name.toLowerCase();
-            const fileExtension = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
-            const isValidExtension = fileExtension && allowedExtensions.includes(fileExtension);
-            const isValidMimeType = file.type && allowedMimeTypes.includes(file.type);
-            
-            if (!isValidExtension && !isValidMimeType) {
-                fileError = {
-                    name: file.name,
-                    reason: 'extension',
-                    message: `O arquivo "${file.name}" não é permitido. Extensões aceitas: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG`
-                };
-            }
-        }
-        
-        if (fileError) {
-            invalidFiles.push(fileError);
+        const fileName = file.name.toLowerCase();
+        const fileExtension = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
+        const isValidExtension = fileExtension && allowedExtensions.includes(fileExtension);
+        const isValidMimeType = file.type && allowedMimeTypes.includes(file.type);
+
+        if (!isValidExtension && !isValidMimeType) {
+            invalidFiles.push({
+                reason: 'extension',
+                message: `O arquivo "${file.name}" não é permitido. Extensões: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG`
+            });
         }
     }
-
-    // Se houver arquivos inválidos, mostra erro e não adiciona nenhum
     if (invalidFiles.length > 0) {
-        // Mostra erro para cada arquivo inválido
-        invalidFiles.forEach(fileError => {
-            toast.add({ 
-                severity: 'error', 
-                summary: fileError.reason === 'size' ? 'Arquivo muito grande' : 'Tipo de arquivo não permitido', 
-                detail: fileError.message, 
-                life: 6000 
-            });
-        });
-        
-        // Limpa o componente FileUpload
-        if (fileUploadRef.value && fileUploadRef.value.clear) {
-            fileUploadRef.value.clear();
-        }
+        invalidFiles.forEach(f => toast.add({ severity: 'error', summary: 'Tipo não permitido', detail: f.message, life: 6000 }));
+        if (fileUploadRef.value?.clear) fileUploadRef.value.clear();
         return;
     }
 
-    // Se passou nas validações, adiciona à lista temporária
+    // 3. Validação de Tamanho Total (soma de todos os arquivos)
+    const currentTotal = newAttachments.value.reduce((acc, f) => acc + f.size, 0);
+    const newFilesTotal = [...files].reduce((acc, f) => acc + f.size, 0);
+    const totalSize = currentTotal + newFilesTotal;
+
+    if (totalSize > MAX_TOTAL_SIZE) {
+        const totalMB = (totalSize / 1024 / 1024).toFixed(2);
+        toast.add({
+            severity: 'error',
+            summary: 'Limite de Tamanho Excedido',
+            detail: `O total dos arquivos não pode ultrapassar 5MB. Total atual: ${totalMB} MB. Ex.: 1 arquivo de 5MB ou 2 arquivos de 2MB.`,
+            life: 6000
+        });
+        if (fileUploadRef.value?.clear) fileUploadRef.value.clear();
+        return;
+    }
+
+    // Adiciona à lista
     files.forEach(f => {
-        // Evita duplicatas de nome na lista de novos
         if (!newAttachments.value.some(existing => existing.name === f.name)) {
             newAttachments.value.push(f);
         }
     });
-    
-    // Limpa o input visual para permitir selecionar mais depois
-    if (fileUploadRef.value && fileUploadRef.value.clear) {
-        fileUploadRef.value.clear();
-    }
-    
-    // Feedback positivo quando arquivos são aceitos
+    if (fileUploadRef.value?.clear) fileUploadRef.value.clear();
+
     if (files.length > 0) {
-        toast.add({ 
-            severity: 'success', 
-            summary: 'Arquivo(s) adicionado(s)', 
-            detail: `${files.length} arquivo(s) adicionado(s) com sucesso.`, 
-            life: 3000 
-        });
+        toast.add({ severity: 'success', summary: 'Arquivo(s) adicionado(s)', detail: `${files.length} arquivo(s) adicionado(s).`, life: 3000 });
     }
 };
 
-// Handler para erros do FileUpload (quando o componente detecta problema antes do nosso handler)
+// Handler para erros do FileUpload (componente detecta problema antes do nosso handler)
 const onFileError = (event) => {
     console.error('Erro no FileUpload:', event);
-    
-    if (event.files && event.files.length > 0) {
+    if (event.files?.length > 0) {
         const file = event.files[0];
-        const maxFileSize = 2 * 1024 * 1024; // 2 MB
-        
-        if (file.size > maxFileSize) {
-            toast.add({ 
-                severity: 'error', 
-                summary: 'Arquivo muito grande', 
-                detail: `O arquivo "${file.name}" excede o limite de 2MB. Tamanho: ${(file.size / 1024 / 1024).toFixed(2)} MB`, 
-                life: 6000 
+        if (file.size > MAX_TOTAL_SIZE) {
+            toast.add({
+                severity: 'error',
+                summary: 'Arquivo muito grande',
+                detail: `O arquivo "${file.name}" excede 5MB. Tamanho: ${(file.size / 1024 / 1024).toFixed(2)} MB`,
+                life: 6000
             });
         } else {
-            toast.add({ 
-                severity: 'error', 
-                summary: 'Erro ao selecionar arquivo', 
-                detail: event.error || `Erro ao processar o arquivo "${file.name}". Verifique se o tipo de arquivo é permitido.`, 
-                life: 5000 
+            toast.add({
+                severity: 'error',
+                summary: 'Erro ao selecionar arquivo',
+                detail: event.error || `Erro ao processar "${file.name}". Verifique o tipo de arquivo.`,
+                life: 5000
             });
         }
     } else {
-        toast.add({ 
-            severity: 'error', 
-            summary: 'Erro ao selecionar arquivo', 
-            detail: event.error || 'Erro desconhecido ao selecionar arquivo.', 
-            life: 5000 
-        });
+        toast.add({ severity: 'error', summary: 'Erro ao selecionar arquivo', detail: event.error || 'Erro desconhecido.', life: 5000 });
     }
-    
-    // Limpa o componente
-    if (fileUploadRef.value && fileUploadRef.value.clear) {
-        fileUploadRef.value.clear();
-    }
+    if (fileUploadRef.value?.clear) fileUploadRef.value.clear();
 };
 
 const removeNewAttachment = (index) => {
@@ -313,19 +270,18 @@ const savePlan = async (forceSubmit = false) => {
         }
     }
     
-    // Validação adicional de arquivos antes de enviar
-    const maxFileSize = 2 * 1024 * 1024; // 2 MB
-    for (let file of newAttachments.value) {
-        if (file.size > maxFileSize) {
-            toast.add({ 
-                severity: 'error', 
-                summary: 'Arquivo muito grande', 
-                detail: `O arquivo "${file.name}" excede 2MB. Tamanho: ${(file.size / 1024 / 1024).toFixed(2)} MB`, 
-                life: 5000 
-            });
-            submitted.value = false;
-            return; // IMPEDE o envio
-        }
+    // Validação adicional: total dos arquivos <= 5MB
+    const totalSize = newAttachments.value.reduce((acc, f) => acc + f.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+        const totalMB = (totalSize / 1024 / 1024).toFixed(2);
+        toast.add({
+            severity: 'error',
+            summary: 'Limite de tamanho excedido',
+            detail: `O total dos arquivos é ${totalMB} MB. O limite é 5MB.`,
+            life: 5000
+        });
+        submitted.value = false;
+        return;
     }
 
     const formData = new FormData();
@@ -585,15 +541,15 @@ onMounted(() => { loadData(); });
                     </div>
 
                     <div class="col-span-12 xl:col-span-12">
-                        <label class="block font-bold mb-3">Anexar Materiais (Máx 5 arquivos de 2MB)</label>
-                        <small class="text-gray-500 block mb-2">Extensões permitidas: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG</small>
+                        <label class="block font-bold mb-3">Anexar Materiais (Máx 5 arquivos, 5MB total)</label>
+                        <small class="text-gray-500 block mb-2">Extensões: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG. Ex.: 1 arquivo de 5MB ou 2 de 2MB.</small>
                         
                         <FileUpload 
                             ref="fileUploadRef"
                             mode="basic" 
                             name="attachments" 
                             accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,image/*" 
-                            :maxFileSize="2097152" 
+                            :maxFileSize="5242880"
                             :fileLimit="5"
                             multiple
                             @select="onFileSelect"
