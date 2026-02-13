@@ -64,8 +64,8 @@ watch(localVisible, (val) => {
 // --- CARREGAMENTO DE DADOS ---
 const loadAuxiliaryData = async () => {
     try {
-        const gRes = await api.get('guardians/');
-        guardians.value = gRes.data.results.map(g => ({ id: g.id, label: `${g.name} (CPF: ${g.cpf})` }));
+        const gRes = await api.get('guardians/?page_size=1000');
+        guardians.value = (gRes.data.results || gRes.data).map(g => ({ id: g.id, label: `${g.name} (CPF: ${g.cpf})` }));
     } catch (e) {
         console.error("Erro ao carregar auxiliares", e);
     }
