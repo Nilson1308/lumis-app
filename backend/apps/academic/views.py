@@ -467,13 +467,13 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         if not subject_id or not date:
             return Response({"error": "Matéria e Data são obrigatórios"}, status=400)
 
+        from datetime import datetime
+        from .models import AcademicPeriod
+
         # Atualiza automaticamente o período ativo antes de buscar
         AcademicPeriod.update_active_period()
-        
+
         # Busca o período acadêmico que contém a data
-        from .models import AcademicPeriod
-        from datetime import datetime
-        
         date_obj = datetime.strptime(date, '%Y-%m-%d').date()
         period = AcademicPeriod.objects.filter(
             start_date__lte=date_obj,
