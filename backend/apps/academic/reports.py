@@ -1,6 +1,9 @@
 import os
+import re
+from html import unescape
 from django.http import HttpResponse
 from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 from django.conf import settings
 # Bloco de segurança do WeasyPrint
 try:
@@ -35,6 +38,19 @@ def _get_report_branding(request):
     else:
         logo_url = None
     return logo_url, 'Lumis Educacional'
+
+
+def _plain_text_from_editor(html_content):
+    """
+    Converte conteúdo do Editor (HTML) em texto limpo para PDF.
+    Remove tags, decodifica entidades (&nbsp; etc.) e normaliza espaços.
+    """
+    if not html_content:
+        return ''
+    text = strip_tags(html_content)
+    text = unescape(text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 def generate_student_report_card(request, enrollment_id):
     try:
@@ -190,8 +206,8 @@ def generate_diary_report(request):
             'date': tc.date.strftime('%d/%m/%Y'),
             'subject': tc.assignment.subject.name,
             'teacher': tc.assignment.teacher.get_full_name() or tc.assignment.teacher.username,
-            'content': tc.content,
-            'homework': tc.homework or '-'
+            'content': _plain_text_from_editor(tc.content),
+            'homework': _plain_text_from_editor(tc.homework) if tc.homework else '-'
         })
 
     logo_url, school_name = _get_report_branding(request)
