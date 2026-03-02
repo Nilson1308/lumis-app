@@ -273,6 +273,26 @@ class LessonPlanSerializer(serializers.ModelSerializer):
         
         return data
 
+    def update(self, instance, validated_data):
+        """
+        Protege o campo 'coordinator_note':
+        - Apenas usuários da coordenação/direção/secretaria (power_groups) ou superusuário
+          podem alterar este campo.
+        - Professores que editarem o planejamento não conseguem sobrescrever/apagar
+          o feedback da coordenação.
+        """
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+
+        if user and not (
+            user.is_superuser or user.groups.filter(name__in=power_groups).exists()
+        ):
+            # Remove coordinator_note para impedir que professores o alterem/apaguem
+            validated_data.pop('coordinator_note', None)
+
+        return super().update(instance, validated_data)
+
 class SimpleUserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     

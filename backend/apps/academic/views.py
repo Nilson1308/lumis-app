@@ -470,19 +470,32 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         from datetime import datetime
         from .models import AcademicPeriod
 
-        # Atualiza automaticamente o período ativo antes de buscar
-        AcademicPeriod.update_active_period()
+        try:
+            # Atualiza automaticamente o período ativo antes de buscar
+            AcademicPeriod.update_active_period()
 
-        # Busca o período acadêmico que contém a data
-        date_obj = datetime.strptime(date, '%Y-%m-%d').date()
-        period = AcademicPeriod.objects.filter(
-            start_date__lte=date_obj,
-            end_date__gte=date_obj
-        ).first()
-        
-        # Se não encontrou período específico, usa o período ativo
+            # Busca o período acadêmico que contém a data informada
+            date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+            period = AcademicPeriod.objects.filter(
+                start_date__lte=date_obj,
+                end_date__gte=date_obj
+            ).first()
+
+            # Se não encontrou período específico, tenta o período ativo
+            if not period:
+                period = AcademicPeriod.objects.filter(is_active=True).first()
+        except Exception as e:
+            return Response(
+                {"error": f"Erro ao determinar o período acadêmico: {str(e)}"},
+                status=400
+            )
+
+        # Se ainda assim não houver período, retorna erro claro em vez de seguir silenciosamente
         if not period:
-            period = AcademicPeriod.objects.filter(is_active=True).first()
+            return Response(
+                {"error": "Nenhum período acadêmico encontrado para a data informada."},
+                status=400
+            )
 
         # Transaction Atomic: Ou salva tudo, ou não salva nada (segurança)
         with transaction.atomic():
@@ -511,29 +524,51 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def weekly_dates(self, request):
-        """Retorna as datas da semana atual onde houve chamada para uma turma/matéria"""
+        """
+        Retorna as datas em que houve chamada para uma turma/matéria.
+        - Se 'month' e 'year' forem informados em query_params, retorna TODAS as datas desse mês.
+        - Caso contrário, retorna as datas da semana atual (comportamento original).
+        """
         subject_id = request.query_params.get('subject')
         classroom_id = request.query_params.get('classroom')
-        
+        month = request.query_params.get('month')
+        year = request.query_params.get('year')
+
         if not subject_id or not classroom_id:
             return Response({"error": "Parâmetros 'subject' e 'classroom' são obrigatórios"}, status=400)
-        
-        from datetime import datetime, timedelta
-        today = datetime.now().date()
-        # Segunda-feira da semana atual
-        monday = today - timedelta(days=today.weekday())
-        sunday = monday + timedelta(days=6)
-        
-        dates = Attendance.objects.filter(
+
+        from datetime import datetime, timedelta, date as date_cls
+        import calendar
+
+        # Filtro base
+        qs = Attendance.objects.filter(
             subject_id=subject_id,
             enrollment__classroom_id=classroom_id,
-            date__gte=monday,
-            date__lte=sunday
-        ).values_list('date', flat=True).distinct()
-        
+        )
+
+        # 1) Filtro por mês/ano (histórico completo do mês)
+        if month and year:
+            try:
+                month_int = int(month)
+                year_int = int(year)
+                first_day = date_cls(year_int, month_int, 1)
+                last_day = date_cls(year_int, month_int, calendar.monthrange(year_int, month_int)[1])
+            except ValueError:
+                return Response({"error": "Parâmetros 'month' e 'year' inválidos."}, status=400)
+
+            qs = qs.filter(date__gte=first_day, date__lte=last_day)
+        else:
+            # 2) Fallback: semana atual (comportamento anterior)
+            today = datetime.now().date()
+            monday = today - timedelta(days=today.weekday())
+            sunday = monday + timedelta(days=6)
+            qs = qs.filter(date__gte=monday, date__lte=sunday)
+
+        dates = qs.values_list('date', flat=True).distinct().order_by('date')
+
         # Converte para strings YYYY-MM-DD
         date_strings = [str(d) for d in dates]
-        
+
         return Response(date_strings)
 
     @action(detail=False, methods=['get'])
@@ -1101,24 +1136,26 @@ class LessonPlanViewSet(viewsets.ModelViewSet):
     search_fields = ['topic', 'assignment__teacher__first_name']
 
     def get_queryset(self):
+        """
+        Regras de visibilidade:
+        - Superusuário: vê todos os planejamentos.
+        - Coordenação/Direção/Secretaria (power_groups): vê apenas os planos em que é destinatário (recipients),
+          para manter rastreabilidade de quem recebeu o planejamento.
+        - Professor: vê ESTRITAMENTE os planos das suas próprias atribuições.
+        """
         user = self.request.user
         queryset = LessonPlan.objects.all().order_by('-start_date')
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
 
-        # Se for Superusuário, vê tudo
+        # 1) Superusuário tem acesso total
         if user.is_superuser:
             return queryset
-        
-        # Se for do grupo Coordenação, vê:
-        # A) Planos onde ele é explicitamente destinatário (recipients)
-        # B) OU (Opcional) Vê tudo, se for regra da escola.
-        if user.groups.filter(name='Coordenacao').exists():
-            # Exemplo: Vê apenas os direcionados a ele
+
+        # 2) Coordenação / Direção / Secretaria
+        if user.groups.filter(name__in=power_groups).exists():
             return queryset.filter(recipients=user)
-            
-            # Se quiser ver TUDO:
-            # return queryset
-        
-        # Professor vê só os seus
+
+        # 3) Professor: isolamento total – só vê seus próprios planejamentos
         return queryset.filter(assignment__teacher=user)
 
     def perform_create(self, serializer):
