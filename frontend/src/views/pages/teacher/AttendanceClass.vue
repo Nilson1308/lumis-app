@@ -94,17 +94,22 @@ const loadWeeklyDates = async () => {
     }
 };
 
-// --- VERIFICAR CHAMADA EXISTENTE ---
+// --- VERIFICAR CHAMADA EXISTENTE (endpoint daily-log SEM paginação) ---
 const checkExistingAttendance = async () => {
     if (!assignment.value) return;
-    
+
     const dateStr = formatDateForAPI(attendanceDate.value);
 
     try {
-        // Busca registros dessa matéria, nessa turma, nessa data
-        const res = await api.get(`attendance/?subject=${assignment.value.subject}&date=${dateStr}&enrollment__classroom=${assignment.value.classroom}`);
-        
-        const existingRecords = res.data.results;
+        const res = await api.get('attendance/daily-log/', {
+            params: {
+                date: dateStr,
+                classroom: assignment.value.classroom,
+                subject: assignment.value.subject
+            }
+        });
+
+        const existingRecords = Array.isArray(res.data) ? res.data : [];
         attendanceRecorded.value = existingRecords.length > 0;
 
         // Atualiza o estado visual
@@ -174,7 +179,8 @@ const saveAttendance = async () => {
         await checkExistingAttendance();
         
     } catch (error) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar chamada.', life: 3000 });
+        const msg = error.response?.data?.error || error.response?.data?.detail || error.message || 'Erro ao salvar chamada.';
+        toast.add({ severity: 'error', summary: 'Falha ao Salvar', detail: msg, life: 5000 });
     } finally {
         saving.value = false;
     }

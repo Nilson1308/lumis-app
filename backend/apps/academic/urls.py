@@ -5,7 +5,7 @@ from .views import (
     SegmentViewSet, ClassRoomViewSet, StudentViewSet,
     EnrollmentViewSet, SubjectViewSet, TeacherAssignmentViewSet,
     GradeViewSet, AttendanceViewSet, AcademicPeriodViewSet,
-    DashboardDataView, GuardianViewSet, LessonPlanViewSet,
+    DashboardDataView, DashboardRiskStudentsView, GuardianViewSet, LessonPlanViewSet,
     CoordinatorViewSet, AbsenceJustificationViewSet,
     ExtraActivityViewSet, ExtraActivityEnrollmentViewSet, ExtraActivityAttendanceViewSet,
     TaughtContentViewSet, SchoolEventViewSet,
@@ -42,6 +42,7 @@ router.register(r'student-checklists', StudentDailyChecklistViewSet)
 
 urlpatterns = [
     path('dashboard/data/', DashboardDataView.as_view(), name='dashboard_data'),
+    path('dashboard/risk-students/', DashboardRiskStudentsView.as_view(), name='dashboard_risk_students'),
     path('reports/student_card/<int:enrollment_id>/', reports.generate_student_report_card, name='student_report_card'),
     path('', include(router.urls)),
 ]

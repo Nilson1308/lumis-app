@@ -443,8 +443,42 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         'subject', 
         'date', 
         'period',
-        'enrollment__classroom',  # <-- adicionar isso
+        'enrollment__classroom',
     ]
+
+    @action(detail=False, methods=['get'], url_path='daily-log')
+    def daily_log(self, request):
+        """
+        Retorna a lista COMPLETA de presenças de um dia (SEM PAGINAÇÃO).
+        Parâmetros: date (YYYY-MM-DD), classroom, subject.
+        Usado pela tela de Chamada para garantir todos os alunos.
+        """
+        date_str = request.query_params.get('date')
+        classroom_id = request.query_params.get('classroom')
+        subject_id = request.query_params.get('subject')
+
+        if not date_str or not classroom_id:
+            return Response(
+                {"error": "Parâmetros 'date' e 'classroom' são obrigatórios"},
+                status=400
+            )
+
+        from datetime import datetime
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"error": "Formato de data inválido. Use YYYY-MM-DD."}, status=400)
+
+        qs = Attendance.objects.filter(
+            date=date_obj,
+            enrollment__classroom_id=classroom_id
+        ).select_related('enrollment', 'subject').order_by('enrollment__student__name')
+
+        if subject_id:
+            qs = qs.filter(subject_id=subject_id)
+
+        serializer = AttendanceSerializer(qs, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['post'])
     def bulk_save(self, request):
@@ -497,30 +531,39 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 status=400
             )
 
-        # Transaction Atomic: Ou salva tudo, ou não salva nada (segurança)
-        with transaction.atomic():
-            created_count = 0
-            updated_count = 0
-            
-            for item in records:
-                # update_or_create: Se já lançou chamada nesse dia, atualiza. Se não, cria.
-                obj, created = Attendance.objects.update_or_create(
-                    enrollment_id=item['enrollment_id'],
-                    subject_id=subject_id,
-                    date=date,
-                    defaults={
-                        'present': item['present'],
-                        'period': period
-                    }
-                )
-                if created: created_count += 1
-                else: updated_count += 1
+        try:
+            with transaction.atomic():
+                created_count = 0
+                updated_count = 0
 
-        return Response({
-            "message": "Chamada realizada com sucesso!",
-            "created": created_count,
-            "updated": updated_count
-        })
+                for item in records:
+                    obj, created = Attendance.objects.update_or_create(
+                        enrollment_id=item['enrollment_id'],
+                        subject_id=subject_id,
+                        date=date,
+                        defaults={
+                            'present': item['present'],
+                            'period': period
+                        }
+                    )
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
+
+            return Response({
+                "message": "Chamada realizada com sucesso!",
+                "created": created_count,
+                "updated": updated_count
+            })
+        except Exception as e:
+            print(f"[AttendanceViewSet.bulk_save] ERRO: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": f"Erro ao salvar chamada: {str(e)}"},
+                status=500
+            )
 
     @action(detail=False, methods=['get'])
     def weekly_dates(self, request):
@@ -1122,6 +1165,53 @@ class DashboardDataView(APIView):
             }
 
         return Response(data)
+
+
+class DashboardRiskStudentsView(APIView):
+    """
+    Lista alunos em risco (+5 faltas).
+    Coordenadores: todas as turmas.
+    Professores: apenas turmas onde lecionam.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    risk_threshold = 5
+
+    def get(self, request):
+        from django.db.models import Prefetch
+
+        user = request.user
+        is_coordinator = user.is_superuser or user.groups.filter(name='Coordenacao').exists()
+
+        if is_coordinator:
+            qs = Student.objects.annotate(
+                absences=Count('enrollment__attendance', filter=Q(enrollment__attendance__present=False))
+            ).filter(absences__gt=self.risk_threshold).prefetch_related(
+                Prefetch('enrollment_set', queryset=Enrollment.objects.filter(active=True).select_related('classroom'))
+            )
+        else:
+            my_classrooms = ClassRoom.objects.filter(teacherassignment__teacher=user).distinct()
+            qs = Student.objects.filter(enrollment__classroom__in=my_classrooms).annotate(
+                absences=Count('enrollment__attendance', filter=Q(enrollment__attendance__present=False))
+            ).filter(absences__gt=self.risk_threshold).distinct().prefetch_related(
+                Prefetch('enrollment_set', queryset=Enrollment.objects.filter(active=True, classroom__in=my_classrooms).select_related('classroom'))
+            )
+
+        result = []
+        for s in qs:
+            enr = s.enrollment_set.first()
+            classroom_name = enr.classroom.name if enr else '-'
+            result.append({
+                'id': s.id,
+                'name': s.name,
+                'registration_number': s.registration_number,
+                'classroom_name': classroom_name,
+                'classroom_id': enr.classroom_id if enr else None,
+                'enrollment_id': enr.id if enr else None,
+                'absences': s.absences
+            })
+
+        return Response(result)
+
 
 class LessonPlanViewSet(viewsets.ModelViewSet):
     serializer_class = LessonPlanSerializer

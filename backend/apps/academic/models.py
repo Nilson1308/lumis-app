@@ -458,6 +458,7 @@ class LessonPlan(models.Model):
     # Fluxo de Aprovação
     status = models.CharField("Status", max_length=20, choices=STATUS_CHOICES, default='DRAFT')
     coordinator_note = models.TextField("Feedback da Coordenação", blank=True)
+    attachment_link = models.CharField("Link para Download (arquivo > 5MB)", max_length=500, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

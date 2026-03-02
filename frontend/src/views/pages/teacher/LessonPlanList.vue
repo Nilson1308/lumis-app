@@ -2,7 +2,7 @@
 import { ref, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useToast } from 'primevue/usetoast';
-import { FilterMatchMode } from '@primevue/core/api'; 
+import { FilterMatchMode } from '@primevue/core/api';
 import api from '@/service/api';
 
 const toast = useToast();
@@ -126,7 +126,8 @@ const openNew = () => {
         assignment: route.query.assignment ? parseInt(route.query.assignment) : null,
         recipients: [],
         description: '',
-        attachments: [] // Backend deve retornar array de objetos {id, url, name}
+        attachments: [],
+        attachment_link: ''
     };
     newAttachments.value = [];
     submitted.value = false;
@@ -340,7 +341,9 @@ const savePlan = async (forceSubmit = false) => {
     if (forceSubmit) formData.append('status', 'SUBMITTED');
     else formData.append('status', plan.value.status || 'DRAFT');
 
-    // --- CORREÇÃO DOS ANEXOS MÚLTIPLOS ---
+    if (plan.value.attachment_link) formData.append('attachment_link', plan.value.attachment_link);
+
+    // --- ANEXOS MÚLTIPLOS ---
     // Envia cada arquivo como um item na lista 'attachments'
     // IMPORTANTE: O Backend precisa aceitar 'attachments' (plural) no request.FILES
     newAttachments.value.forEach(file => {
@@ -514,16 +517,32 @@ onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators
                                 <i class="pi pi-paperclip text-xl"></i>
                             </a>
                         </div>
+                        <div v-else-if="slotProps.data.attachment_link">
+                            <a :href="slotProps.data.attachment_link" target="_blank" class="text-primary" v-tooltip.top="'Link externo'">
+                                <i class="pi pi-link text-xl"></i>
+                            </a>
+                        </div>
                     </template>
                 </Column>
 
-                <Column field="status" header="Status" sortable style="width: 15%">
+                <Column field="status" header="Status" sortable style="width: 12%">
                     <template #body="slotProps">
                         <Tag :severity="getStatusSeverity(slotProps.data.status)" :value="getStatusLabel(slotProps.data.status)" />
                     </template>
                 </Column>
 
-                <Column header="Ações" style="width: 15%">
+                <Column header="Status/Feedback" style="width: 10%">
+                    <template #body="slotProps">
+                        <i 
+                            v-if="slotProps.data.coordinator_note" 
+                            class="pi pi-comment text-orange-500 text-xl cursor-pointer" 
+                            v-tooltip.top="slotProps.data.coordinator_note"
+                        />
+                        <span v-else class="text-gray-400">—</span>
+                    </template>
+                </Column>
+
+                <Column header="Ações" style="width: 12%">
                     <template #body="slotProps">
                         <Button icon="pi pi-pencil" class="p-button-rounded mr-2" @click="editPlan(slotProps.data)" />
                         <Button icon="pi pi-trash" class="p-button-rounded p-button-warning" @click="confirmDelete(slotProps.data)" />
@@ -532,6 +551,13 @@ onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators
             </DataTable>
 
             <Dialog v-model:visible="planDialog" :style="{ width: '900px' }" header="Semanário / Planejamento" :modal="true" class="p-fluid" maximizable>
+
+                <div v-if="plan.coordinator_note" class="field col-12 mb-4">
+                    <Message severity="warn" :closable="false">
+                        <div class="font-bold mb-2">📢 Feedback da Coordenação:</div>
+                        <p class="m-0" style="white-space: pre-wrap;">{{ plan.coordinator_note }}</p>
+                    </Message>
+                </div>
                 
                 <div class="grid grid-cols-12 gap-4 mb-2">
                     <div class="col-span-12 xl:col-span-12">
@@ -587,6 +613,11 @@ onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators
                         <label class="block font-bold mb-3">Anexar Materiais (Máx 5 arquivos, 5MB total)</label>
                         <small class="text-gray-500 block mb-2">Extensões: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG. Ex.: 1 arquivo de 5MB ou 2 de 2MB.</small>
                         
+                        <div class="mb-3">
+                            <label class="block font-bold mb-2 text-sm">Link para arquivo grande (&gt; 5MB)</label>
+                            <InputText v-model="plan.attachment_link" placeholder="Cole aqui o link (Google Drive, OneDrive, etc.)" class="w-full" />
+                        </div>
+                        
                         <FileUpload 
                             ref="fileUploadRef"
                             mode="basic" 
@@ -630,13 +661,6 @@ onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators
                     <div class="col-span-12 xl:col-span-12">
                         <label class="font-bold text-primary">Desenvolvimento da Aula (O que será feito?)</label>
                         <Editor v-model="plan.description" fluid editorStyle="height: 320px" />
-                    </div>
-
-                    <div class="col-span-12" v-if="plan.coordinator_feedback">
-                        <label class="font-bold text-orange-500">Feedback da Coordenação:</label>
-                        <div class="surface-ground p-3 border-round border-l-4 border-orange-500 mt-1">
-                            {{ plan.coordinator_feedback }}
-                        </div>
                     </div>
                 </div>
 

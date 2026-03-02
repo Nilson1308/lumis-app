@@ -232,7 +232,7 @@ class LessonPlanSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'assignment', 'topic', 'description', 
             'start_date', 'end_date', 'status', 
-            'recipients', 'attachments', 'attachment', # Mantemos 'attachment' para ler os antigos se precisar
+            'recipients', 'attachments', 'attachment', 'attachment_link',
             'coordinator_note', 'teacher_name', 'subject_name', 
             'classroom_name', 'created_at', 'updated_at'
         ]
@@ -274,21 +274,18 @@ class LessonPlanSerializer(serializers.ModelSerializer):
         return data
 
     def update(self, instance, validated_data):
-        """
-        Protege o campo 'coordinator_note':
-        - Apenas usuários da coordenação/direção/secretaria (power_groups) ou superusuário
-          podem alterar este campo.
-        - Professores que editarem o planejamento não conseguem sobrescrever/apagar
-          o feedback da coordenação.
-        """
         request = self.context.get('request')
-        user = getattr(request, 'user', None)
-        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+        user = request.user if request else None
 
-        if user and not (
+        power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+        is_power_user = user and (
             user.is_superuser or user.groups.filter(name__in=power_groups).exists()
-        ):
-            # Remove coordinator_note para impedir que professores o alterem/apaguem
+        )
+
+        if is_power_user:
+            if 'coordinator_note' in validated_data:
+                instance.coordinator_note = validated_data.pop('coordinator_note')
+        else:
             validated_data.pop('coordinator_note', None)
 
         return super().update(instance, validated_data)

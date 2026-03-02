@@ -115,8 +115,9 @@ const clearFilters = () => {
 
 // --- ABRIR MODAL DE REVISÃO ---
 const openReview = (plan) => {
+    if (plan.status === 'DRAFT') return;
     currentPlan.value = plan;
-    feedbackText.value = plan.coordinator_feedback || ''; 
+    feedbackText.value = plan.coordinator_note || ''; 
     reviewDialog.value = true;
 };
 
@@ -124,7 +125,7 @@ const saveFeedback = async (status) => {
     try {
         await api.patch(`lesson-plans/${currentPlan.value.id}/`, {
             status: status,
-            coordinator_feedback: feedbackText.value
+            coordinator_note: feedbackText.value
         });
         toast.add({ severity: 'success', summary: 'Avaliado', detail: `Status definido como ${getStatusLabel(status)}`, life: 3000 });
         reviewDialog.value = false;
@@ -254,6 +255,9 @@ const executeUnsubscribe = async () => {
                                 <i class="pi pi-paperclip text-xl"></i>
                             </a>
                         </span>
+                        <span v-else-if="slotProps.data.status === 'DRAFT'" class="text-gray-600">
+                            <i class="pi pi-folder text-xl mr-1"></i> {{ slotProps.data.attachments.length }}
+                        </span>
                         <span v-else class="text-primary font-bold cursor-pointer" @click="openReview(slotProps.data)" v-tooltip.top="'Ver todos'">
                             <i class="pi pi-folder text-xl mr-1"></i> {{ slotProps.data.attachments.length }}
                         </span>
@@ -283,7 +287,8 @@ const executeUnsubscribe = async () => {
             
             <Column header="Ações">
                 <template #body="slotProps">
-                    <Button icon="pi pi-eye" label="Revisar" class="p-button-sm" @click="openReview(slotProps.data)" />
+                    <Button v-if="slotProps.data.status !== 'DRAFT'" icon="pi pi-eye" label="Revisar" class="p-button-sm" @click="openReview(slotProps.data)" />
+                    <span v-else class="text-gray-400 text-sm">Rascunho</span>
                 </template>
             </Column>
         </DataTable>
@@ -302,12 +307,12 @@ const executeUnsubscribe = async () => {
                     <div class="mb-4">
                         <span class="text-sm text-gray-500 block mb-1">Desenvolvimento</span>
                         
-                        <div class="surface-100 p-3 border-round overflow-auto max-h-[500px]">
+                        <div class="surface-100 p-3 border-round overflow-y-auto overflow-x-hidden max-h-[500px]">
                             <div v-html="currentPlan.description || 'Sem descrição.'" class="html-content"></div>
                         </div>
                     </div>
 
-                    <div v-if="(currentPlan.attachments && currentPlan.attachments.length) || currentPlan.attachment" class="mb-4">
+                    <div v-if="(currentPlan.attachments && currentPlan.attachments.length) || currentPlan.attachment || currentPlan.attachment_link" class="mb-4">
                         <span class="text-sm text-gray-500 block mb-2">Arquivos Anexados</span>
                         <div v-if="currentPlan.attachments">
                             <div v-for="att in currentPlan.attachments" :key="att.id" class="flex items-center gap-2 mb-2 p-2 surface-50 border-round">
@@ -321,6 +326,10 @@ const executeUnsubscribe = async () => {
                         <div v-if="currentPlan.attachment" class="flex items-center gap-2 p-2 surface-50 border-round">
                              <i class="pi pi-file text-primary"></i>
                              <a :href="currentPlan.attachment" target="_blank" class="font-bold text-primary hover:underline">Arquivo Único (Antigo)</a>
+                        </div>
+                        <div v-if="currentPlan.attachment_link" class="flex items-center gap-2 p-2 surface-50 border-round">
+                            <i class="pi pi-link text-primary"></i>
+                            <a :href="currentPlan.attachment_link" target="_blank" class="font-bold text-primary hover:underline">Link para Download (arquivo > 5MB)</a>
                         </div>
                     </div>
                 </div>
@@ -365,8 +374,13 @@ const executeUnsubscribe = async () => {
 
 <style>
 /* CSS para formatar tabelas dentro do v-html do editor */
+.html-content {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
 .html-content table {
     width: 100%;
+    max-width: 100%;
     border-collapse: collapse;
     margin-bottom: 1rem;
 }

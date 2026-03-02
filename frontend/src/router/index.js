@@ -26,6 +26,12 @@ const router = createRouter({
                     component: () => import('@/views/Dashboard.vue')
                 },
                 {
+                    path: '/students-at-risk',
+                    name: 'students-at-risk',
+                    component: () => import('@/views/pages/RiskStudentsList.vue'),
+                    meta: { breadcrumb: 'Alunos em Risco' }
+                },
+                {
                     path: '/notifications',
                     name: 'notifications',
                     component: () => import('@/views/pages/Notifications.vue')

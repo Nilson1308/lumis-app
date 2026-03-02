@@ -224,7 +224,7 @@ const updateChartColors = () => {
         </div>
 
         <div class="col-span-12 lg:col-span-6 xl:col-span-3">
-            <div class="card mb-0">
+            <div class="card mb-0 cursor-pointer hover:surface-hover transition-colors transition-duration-150" @click="$router.push({ name: 'students-at-risk' })">
                 <div class="flex justify-between mb-3">
                     <div>
                         <span class="block text-500 font-medium mb-3">Alunos em Risco (+5 Faltas)</span>
@@ -234,6 +234,7 @@ const updateChartColors = () => {
                         <i class="pi pi-exclamation-triangle text-red-500 text-xl"></i>
                     </div>
                 </div>
+                <Button label="Ver lista" icon="pi pi-arrow-right" iconPos="right" class="p-button-text p-button-sm w-full mt-2" />
             </div>
         </div>
 
