@@ -34,6 +34,7 @@ from .serializers import (
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
 from apps.coordination.models import StudentReport
+from . import reports
 
 class FlexiblePagination(PageNumberPagination):
     page_size = 10
@@ -1211,6 +1212,22 @@ class DashboardRiskStudentsView(APIView):
             })
 
         return Response(result)
+
+
+class ReportDiaryPDFView(APIView):
+    """Diário de classe em PDF. Professor: suas turmas. Coordenador: escolhe turma."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return reports.generate_diary_report(request)
+
+
+class ReportAttendancePDFView(APIView):
+    """Relatório de Frequências em PDF. Professor: suas turmas. Coordenador: escolhe turma."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return reports.generate_attendance_report(request)
 
 
 class LessonPlanViewSet(viewsets.ModelViewSet):

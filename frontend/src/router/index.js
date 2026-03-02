@@ -174,7 +174,13 @@ const router = createRouter({
                     path: '/teacher/relatorios',
                     name: 'student-report',
                     component: () => import('@/views/pages/teacher/StudentReportList.vue')
-                },                
+                },
+                {
+                    path: '/relatorios',
+                    name: 'reports',
+                    component: () => import('@/views/pages/ReportsPage.vue'),
+                    meta: { breadcrumb: 'Relatórios PDF' }
+                },
 
                 // --- COORDENAÇÃO ---
                 {

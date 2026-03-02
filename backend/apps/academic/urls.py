@@ -5,7 +5,8 @@ from .views import (
     SegmentViewSet, ClassRoomViewSet, StudentViewSet,
     EnrollmentViewSet, SubjectViewSet, TeacherAssignmentViewSet,
     GradeViewSet, AttendanceViewSet, AcademicPeriodViewSet,
-    DashboardDataView, DashboardRiskStudentsView, GuardianViewSet, LessonPlanViewSet,
+    DashboardDataView, DashboardRiskStudentsView, ReportDiaryPDFView, ReportAttendancePDFView,
+    GuardianViewSet, LessonPlanViewSet,
     CoordinatorViewSet, AbsenceJustificationViewSet,
     ExtraActivityViewSet, ExtraActivityEnrollmentViewSet, ExtraActivityAttendanceViewSet,
     TaughtContentViewSet, SchoolEventViewSet,
@@ -44,5 +45,7 @@ urlpatterns = [
     path('dashboard/data/', DashboardDataView.as_view(), name='dashboard_data'),
     path('dashboard/risk-students/', DashboardRiskStudentsView.as_view(), name='dashboard_risk_students'),
     path('reports/student_card/<int:enrollment_id>/', reports.generate_student_report_card, name='student_report_card'),
+    path('reports/diary-pdf/', ReportDiaryPDFView.as_view(), name='report_diary_pdf'),
+    path('reports/attendance-pdf/', ReportAttendancePDFView.as_view(), name='report_attendance_pdf'),
     path('', include(router.urls)),
 ]

@@ -143,6 +143,7 @@ watchEffect(() => {
                 { label: 'Relatórios Semanais', icon: 'pi pi-fw pi-list', to: { name: 'weekly-reports' } },
                 { label: 'Observação de Sala', icon: 'pi pi-fw pi-eye', to: { name: 'observations' } },
                 { label: 'Relatórios Alunos', icon: 'pi pi-fw pi-list', to: { name: 'student-report-approval' } },
+                { label: 'Diário e Frequências', icon: 'pi pi-fw pi-file-pdf', to: { name: 'reports' } },
                 // { label: 'Revisar Planejamentos', icon: 'pi pi-fw pi-check-square', to: { name: 'lesson-plans' } }
             ]
         });
@@ -157,6 +158,7 @@ watchEffect(() => {
                 { label: 'Planejamento Semanal', icon: 'pi pi-fw pi-calendar-plus', to: { name: 'lesson-plans' } },
                 { label: 'Relatórios Semanais', icon: 'pi pi-fw pi-list', to: { name: 'weekly-reports' } },
                 { label: 'Relatórios Alunos', icon: 'pi pi-fw pi-list', to: { name: 'student-report' } },
+                { label: 'Diário e Frequências', icon: 'pi pi-fw pi-file-pdf', to: { name: 'reports' } },
             ]
         });
     }

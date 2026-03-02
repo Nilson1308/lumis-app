@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Diário de Classe - {{ school_name }}</title>
+    <style>
+        @page { size: A4; margin: 1.5cm; }
+        body { font-family: 'Helvetica', sans-serif; color: #000; }
+        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        .logo { height: 70px; margin-bottom: 8px; }
+        .header h1 { margin: 5px 0; font-size: 22px; }
+        .header p { margin: 0; font-size: 11px; color: #666; }
+        .info-box { background: #f4f4f4; padding: 15px; margin-bottom: 20px; border-left: 4px solid #333; }
+        .report-title { font-size: 18px; margin: 0 0 15px 0; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #333; color: white; font-weight: normal; }
+        td.content { max-width: 300px; word-wrap: break-word; }
+        .footer { margin-top: 30px; font-size: 10px; color: #999; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        {% if logo_url %}<img src="{{ logo_url }}" class="logo" alt="{{ school_name }}">{% endif %}
+        <h1>{{ school_name }}</h1>
+        <p>{{ report_title }} – {{ period.name }}</p>
+    </div>
+    <div class="info-box">
+        <strong>Turma:</strong> {{ classroom.name }} &nbsp;|&nbsp; <strong>Ano:</strong> {{ classroom.year }} &nbsp;|&nbsp;
+        <strong>Período:</strong> {{ period.start_date|date:"d/m/Y" }} a {{ period.end_date|date:"d/m/Y" }}
+    </div>
+    <h3 class="report-title">{{ report_title }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:12%">Data</th>
+                <th style="width:18%">Disciplina</th>
+                <th style="width:15%">Professor</th>
+                <th style="width:35%">Conteúdo</th>
+                <th style="width:20%">Tarefa / Obs</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+            <tr>
+                <td>{{ r.date }}</td>
+                <td>{{ r.subject }}</td>
+                <td>{{ r.teacher }}</td>
+                <td class="content">{{ r.content|striptags|truncatewords:30 }}</td>
+                <td>{{ r.homework }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">Nenhum registro no período.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="footer">Gerado em {{ generated_at }} • Sistema {{ school_name }}</div>
+</body>
+</html>
