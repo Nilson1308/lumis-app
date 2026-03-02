@@ -1130,7 +1130,7 @@ class LessonPlanViewSet(viewsets.ModelViewSet):
     
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = [
-        'assignment__teacher', 'assignment__classroom', 
+        'assignment', 'assignment__teacher', 'assignment__classroom', 
         'assignment__subject', 'status', 'start_date'
     ]
     search_fields = ['topic', 'assignment__teacher__first_name']
@@ -1138,14 +1138,18 @@ class LessonPlanViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Regras de visibilidade:
-        - Superusuário: vê todos os planejamentos.
-        - Coordenação/Direção/Secretaria (power_groups): vê apenas os planos em que é destinatário (recipients),
-          para manter rastreabilidade de quem recebeu o planejamento.
-        - Professor: vê ESTRITAMENTE os planos das suas próprias atribuições.
+        - view_mode='teacher': contexto de professor (ex.: "Meus Planejamentos") – retorna ESTRITAMENTE
+          os planos do professor, ignorando superuser/coordenação.
+        - Caso contrário: superuser vê tudo; power_groups vê recipients; professor vê os seus.
         """
         user = self.request.user
         queryset = LessonPlan.objects.all().order_by('-start_date')
         power_groups = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Secretaria']
+        view_mode = self.request.query_params.get('view_mode')
+
+        # Isolamento de contexto: "Meus Planejamentos" ( professor )
+        if view_mode == 'teacher':
+            return queryset.filter(assignment__teacher=user)
 
         # 1) Superusuário tem acesso total
         if user.is_superuser:
@@ -1155,7 +1159,7 @@ class LessonPlanViewSet(viewsets.ModelViewSet):
         if user.groups.filter(name__in=power_groups).exists():
             return queryset.filter(recipients=user)
 
-        # 3) Professor: isolamento total – só vê seus próprios planejamentos
+        # 3) Professor (sem view_mode): isolamento – só vê seus planejamentos
         return queryset.filter(assignment__teacher=user)
 
     def perform_create(self, serializer):

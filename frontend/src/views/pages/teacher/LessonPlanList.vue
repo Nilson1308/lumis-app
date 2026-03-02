@@ -18,28 +18,55 @@ const deleteDialog = ref(false);
 const loading = ref(true);
 const submitted = ref(false);
 
+// Paginação server-side (lazy)
+const totalRecords = ref(0);
+const lazyParams = ref({ first: 0, rows: 10, page: 0 });
+
 // Controle de Anexos
 const fileUploadRef = ref(null);
 const newAttachments = ref([]); // Arquivos novos selecionados para upload
 
 const filters = ref({ global: { value: null, matchMode: FilterMatchMode.CONTAINS } });
 
+// --- CARREGAR PLANEJAMENTOS (paginado, view_mode=teacher) ---
+const loadPlans = async () => {
+    loading.value = true;
+    try {
+        const params = {
+            page: (lazyParams.value.page ?? 0) + 1,
+            page_size: lazyParams.value.rows ?? 10,
+            view_mode: 'teacher'
+        };
+        if (route.query.assignment) {
+            params.assignment = parseInt(route.query.assignment);
+        }
+        const res = await api.get('lesson-plans/', { params });
+        plans.value = res.data.results || [];
+        totalRecords.value = res.data.count ?? 0;
+    } catch (e) {
+        console.error("Erro ao carregar planejamentos:", e);
+        plans.value = [];
+        totalRecords.value = 0;
+    } finally {
+        loading.value = false;
+    }
+};
+
+const onPage = (event) => {
+    lazyParams.value = {
+        first: event.first,
+        rows: event.rows,
+        page: event.page
+    };
+    loadPlans();
+};
+
 // --- CARREGAR DADOS ---
 const loadData = async () => {
     loading.value = true;
     try {
-        const resPlans = await api.get('lesson-plans/?page_size=100');
-        let allPlans = resPlans.data.results;
-
-        if (route.query.assignment) {
-            const filterId = parseInt(route.query.assignment);
-            plans.value = allPlans.filter(p => p.assignment === filterId);
-        } else {
-            plans.value = allPlans;
-        }
-
-        const resAssign = await api.get('assignments/?page_size=100');
-        assignments.value = resAssign.data.results.map(a => ({
+        const resAssign = await api.get('assignments/', { params: { page_size: 100 } });
+        assignments.value = (resAssign.data.results || resAssign.data).map(a => ({
             id: a.id,
             label: `${a.subject_name} - ${a.classroom_name}`
         }));
@@ -50,6 +77,8 @@ const loadData = async () => {
             id: u.id,
             label: u.full_name || u.first_name || u.username
         }));
+
+        await loadPlans();
 
         // Lógica de notificação (abrir modal via URL)
         if (route.query.open === 'true' && route.query.assignment && route.query.date) {
@@ -79,7 +108,10 @@ const loadData = async () => {
     }
 };
 
-watch(() => route.query.assignment, () => { loadData(); });
+watch(() => route.query.assignment, () => {
+    lazyParams.value = { first: 0, rows: lazyParams.value.rows, page: 0 };
+    loadPlans();
+});
 
 // --- AÇÕES ---
 const openNew = () => {
@@ -326,7 +358,7 @@ const savePlan = async (forceSubmit = false) => {
             toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado', life: 3000 });
         }
         planDialog.value = false;
-        loadData();
+        await loadPlans();
     } catch (error) {
         console.error('Erro ao salvar planejamento:', error);
         
@@ -379,7 +411,7 @@ const deletePlan = async () => {
         deleteDialog.value = false;
         plan.value = {};
         toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Removido', life: 3000 });
-        loadData();
+        await loadPlans();
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao remover', life: 3000 });
     }
@@ -402,7 +434,7 @@ const getStatusLabel = (status) => {
 
 const clearFilter = () => { router.push({ name: 'lesson-plans' }); };
 
-onMounted(() => { loadData(); });
+onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators e chama loadPlans
 </script>
 
 <template>
@@ -425,7 +457,18 @@ onMounted(() => { loadData(); });
                 </template>
             </Toolbar>
 
-            <DataTable :value="plans" :filters="filters" :loading="loading" responsiveLayout="scroll" :paginator="true" :rows="10">
+            <DataTable 
+                :value="plans" 
+                :filters="filters" 
+                :loading="loading" 
+                responsiveLayout="scroll" 
+                :lazy="true"
+                :totalRecords="totalRecords"
+                :paginator="true" 
+                :rows="lazyParams.rows"
+                :first="lazyParams.first"
+                @page="onPage($event)"
+            >
                 <template #header>
                     <div class="flex flex-wrap gap-2 items-center justify-between">
                         <h4 class="m-0">Meus Planejamentos Semanais</h4>

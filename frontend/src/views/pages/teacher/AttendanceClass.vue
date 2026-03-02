@@ -43,8 +43,10 @@ const loadClassData = async () => {
         const resAssign = await api.get(`assignments/${assignmentId}/`);
         assignment.value = resAssign.data;
 
-        // 2. Carrega alunos da turma
-        const resEnroll = await api.get(`enrollments/?classroom=${assignment.value.classroom}&page_size=100`);
+        // 2. Carrega alunos da turma (page_size alto para turma inteira)
+        const resEnroll = await api.get(`enrollments/`, {
+            params: { classroom: assignment.value.classroom, page_size: 1000 }
+        });
         
         // 3. Prepara a lista base (assumindo Presença = True inicialmente)
         const initialStudents = resEnroll.data.results.map(s => ({
@@ -68,15 +70,26 @@ const loadClassData = async () => {
     }
 };
 
-// --- CARREGAR DATAS DA SEMANA ---
+// --- CARREGAR DATAS COM CHAMADA (mês visualizado) ---
 const loadWeeklyDates = async () => {
     if (!assignment.value) return;
-    
+
+    const refDate = attendanceDate.value || new Date();
+    const month = refDate.getMonth() + 1;
+    const year = refDate.getFullYear();
+
     try {
-        const res = await api.get(`attendance/weekly_dates/?subject=${assignment.value.subject}&classroom=${assignment.value.classroom}`);
+        const res = await api.get(`attendance/weekly_dates/`, {
+            params: {
+                subject: assignment.value.subject,
+                classroom: assignment.value.classroom,
+                month,
+                year
+            }
+        });
         weeklyDates.value = res.data || [];
     } catch (e) {
-        console.error("Erro ao carregar datas da semana", e);
+        console.error("Erro ao carregar datas de chamada", e);
         weeklyDates.value = [];
     }
 };
