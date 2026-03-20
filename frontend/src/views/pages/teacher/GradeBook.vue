@@ -63,16 +63,17 @@ const loadClassData = async () => {
             assignment.value = resAssign.data;
         }
 
-        // 2. Carrega Alunos
-        const resEnroll = await api.get(`enrollments/?classroom=${assignment.value.classroom}&page_size=100`);
+        // 2. Carrega Alunos (turma completa, sem corte por paginação da tela)
+        const resEnroll = await api.get(`enrollments/?classroom=${assignment.value.classroom}&page_size=1000`);
         
         // 3. Carrega Notas do Período
         const resGrades = await api.get(`grades/?enrollment__classroom=${assignment.value.classroom}&subject=${assignment.value.subject}&period=${selectedPeriod.value}&page_size=1000`);
         
-        const allGrades = resGrades.data.results;
+        const allGrades = resGrades.data.results || resGrades.data || [];
+        const allEnrollments = resEnroll.data.results || resEnroll.data || [];
 
         // 4. Cruza os dados
-        students.value = resEnroll.data.results.map(enrollment => {
+        students.value = allEnrollments.map(enrollment => {
             const studentGrades = allGrades.filter(g => g.enrollment === enrollment.id);
             
             // Cálculo Média Ponderada
