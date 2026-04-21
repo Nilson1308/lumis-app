@@ -191,7 +191,7 @@ const onStudentSaved = () => {
 const generatePDF = () => {
     let url = `reports/student_card/${studentToPrint.value}/`;
     if (selectedPrintPeriod.value) {
-        url += `?period=${selectedPrintPeriod.value}`;
+        url += `?academic_period=${selectedPrintPeriod.value}`;
     }
 
     loading.value = true;

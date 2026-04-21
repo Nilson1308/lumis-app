@@ -17,6 +17,7 @@ const planDialog = ref(false);
 const deleteDialog = ref(false);
 const loading = ref(true);
 const submitted = ref(false);
+const submissionGuard = ref({ enabled: false, blocked: false, block_reason: '', overdue_items: [] });
 
 // Paginação server-side (lazy)
 const totalRecords = ref(0);
@@ -78,7 +79,7 @@ const loadData = async () => {
             label: u.full_name || u.first_name || u.username
         }));
 
-        await loadPlans();
+        await Promise.all([loadPlans(), loadSubmissionGuard()]);
 
         // Lógica de notificação (abrir modal via URL)
         if (route.query.open === 'true' && route.query.assignment && route.query.date) {
@@ -105,6 +106,16 @@ const loadData = async () => {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha na conexão', life: 3000 });
     } finally {
         loading.value = false;
+    }
+};
+
+const loadSubmissionGuard = async () => {
+    try {
+        const res = await api.get('lesson-plans/submission-guard/');
+        submissionGuard.value = res.data || { enabled: false, blocked: false, block_reason: '', overdue_items: [] };
+    } catch (e) {
+        console.error('Erro ao carregar política de envio de planejamento', e);
+        submissionGuard.value = { enabled: false, blocked: false, block_reason: '', overdue_items: [] };
     }
 };
 
@@ -270,6 +281,16 @@ const removeNewAttachment = (index) => {
 };
 
 const savePlan = async (forceSubmit = false) => {
+    if (forceSubmit && submissionGuard.value.enabled && submissionGuard.value.blocked) {
+        toast.add({
+            severity: 'error',
+            summary: 'Envio bloqueado',
+            detail: submissionGuard.value.block_reason || 'Seu envio está bloqueado pela coordenação/admin.',
+            life: 6000
+        });
+        return;
+    }
+
     submitted.value = true;
 
     // Validações básicas
@@ -361,7 +382,7 @@ const savePlan = async (forceSubmit = false) => {
             toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Criado', life: 3000 });
         }
         planDialog.value = false;
-        await loadPlans();
+        await Promise.all([loadPlans(), loadSubmissionGuard()]);
     } catch (error) {
         console.error('Erro ao salvar planejamento:', error);
         
@@ -459,6 +480,19 @@ onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators
                     </div>
                 </template>
             </Toolbar>
+
+            <Message v-if="submissionGuard.enabled && submissionGuard.blocked" severity="error" :closable="false" class="mb-4">
+                <div class="font-bold mb-1">Envio de Planejamento Bloqueado</div>
+                <div>{{ submissionGuard.block_reason || 'A coordenação/admin precisa liberar seu fluxo de envio.' }}</div>
+            </Message>
+
+            <Message v-else-if="submissionGuard.enabled && submissionGuard.overdue_items?.length > 0" severity="warn" :closable="false" class="mb-4">
+                <div class="font-bold mb-1">Atenção: há pendências semanais de planejamento</div>
+                <div>
+                    {{ submissionGuard.overdue_items[0].subject_name }} - {{ submissionGuard.overdue_items[0].classroom_name }}
+                    ({{ submissionGuard.overdue_items[0].week_start }} a {{ submissionGuard.overdue_items[0].week_end }})
+                </div>
+            </Message>
 
             <DataTable 
                 :value="plans" 
@@ -669,7 +703,14 @@ onMounted(() => { loadData(); }); // loadData carrega assignments + coordinators
                         <Button label="Apagar" icon="pi pi-trash" class="p-button-text p-button-danger" @click="confirmDelete(plan)" v-if="plan.id" />
                         <div class="flex gap-2">
                             <Button label="Salvar Rascunho" icon="pi pi-save" class="p-button-secondary" @click="savePlan(false)" />
-                            <Button label="Enviar Definitivo" icon="pi pi-send" class="p-button-primary" @click="savePlan(true)" />
+                            <Button
+                                label="Enviar Definitivo"
+                                icon="pi pi-send"
+                                class="p-button-primary"
+                                @click="savePlan(true)"
+                                :disabled="submissionGuard.enabled && submissionGuard.blocked"
+                                v-tooltip.top="submissionGuard.enabled && submissionGuard.blocked ? 'Envio bloqueado pela coordenação/admin' : ''"
+                            />
                         </div>
                     </div>
                 </template>

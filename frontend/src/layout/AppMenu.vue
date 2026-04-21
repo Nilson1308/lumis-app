@@ -78,13 +78,25 @@ watchEffect(() => {
                 { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'calendar' } },
                 ]
         });
+        if (authStore.canEditClassSchedule) {
+            newMenu.push({
+                label: 'Grades horárias',
+                items: [
+                    {
+                        label: 'Gestão por turma',
+                        icon: 'pi pi-fw pi-calendar-clock',
+                        to: { name: 'classroom-schedules-manage' }
+                    }
+                ]
+            });
+        }
     }
     // 2. PORTAL DA FAMÍLIA (Exclusivo para Pais)
     if (authStore.isGuardian) {
         newMenu.push({
             label: 'Portal da Família',
             items: [
-                { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'calendar' } },
+                { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'parent-calendar' } },
                 { label: 'Meus Filhos', icon: 'pi pi-fw pi-users', to: { name: 'parent-dashboard' } },
                 { 
                     label: 'Meus Dados', 
@@ -138,11 +150,13 @@ watchEffect(() => {
                     to: { name: 'planning' },
                     badge: newLessonPlansCount.value
                 },
+                { label: 'Bloqueio de Envio', icon: 'pi pi-fw pi-lock', to: { name: 'planning-guard-manage' } },
                 { label: 'Justificativas de Faltas', icon: 'pi pi-fw pi-check-circle', to: { name: 'justification-review' } },
                 { label: 'Atas de Reunião', icon: 'pi pi-fw pi-file', to: { name: 'meeting-minutes' } },
                 { label: 'Relatórios Semanais', icon: 'pi pi-fw pi-list', to: { name: 'weekly-reports' } },
                 { label: 'Observação de Sala', icon: 'pi pi-fw pi-eye', to: { name: 'observations' } },
                 { label: 'Relatórios Alunos', icon: 'pi pi-fw pi-list', to: { name: 'student-report-approval' } },
+                { label: 'Auditoria (Logs)', icon: 'pi pi-fw pi-shield', to: { name: 'coordination-audit-logs' } },
                 { label: 'Diário e Frequências', icon: 'pi pi-fw pi-file-pdf', to: { name: 'reports' } },
                 // { label: 'Revisar Planejamentos', icon: 'pi pi-fw pi-check-square', to: { name: 'lesson-plans' } }
             ]

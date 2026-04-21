@@ -51,6 +51,18 @@ const router = createRouter({
                     meta: { requiresAuth: true } // Opcional: se tiver middleware de auth
                 },
                 {
+                    path: '/portal/calendario',
+                    name: 'parent-calendar',
+                    component: () => import('@/views/pages/CalendarView.vue'),
+                    meta: { requiresAuth: true, breadcrumb: 'Calendário escolar' }
+                },
+                {
+                    path: '/portal/resumo/:id',
+                    name: 'parent-student-summary',
+                    component: () => import('@/views/pages/parents/ParentStudentSummary.vue'),
+                    meta: { requiresAuth: true }
+                },
+                {
                     path: '/portal/boletim/:id',
                     name: 'parent-report-card',
                     component: () => import('@/views/pages/parents/ReportCardView.vue')
@@ -65,7 +77,18 @@ const router = createRouter({
                     name: 'parent-reports',
                     component: () => import('@/views/pages/parents/StudentReportsView.vue')
                 },
-                
+                {
+                    path: '/portal/diario/:id',
+                    name: 'parent-class-diary',
+                    component: () => import('@/views/pages/parents/ClassDiaryView.vue')
+                },
+                {
+                    path: '/portal/grade/:id',
+                    name: 'parent-class-schedule',
+                    component: () => import('@/views/pages/parents/ParentClassScheduleView.vue'),
+                    meta: { requiresAuth: true, breadcrumb: 'Grade horária' }
+                },
+
                 // --- MÓDULO ACADÊMICO ---
                 {
                     path: '/students',
@@ -87,6 +110,12 @@ const router = createRouter({
                     name: 'classroom-detail',
                     component: () => import('@/views/pages/ClassroomDetail.vue'),
                     meta: { breadcrumb: 'Detalhes da Turma' }
+                },
+                {
+                    path: '/academic/classroom-schedules',
+                    name: 'classroom-schedules-manage',
+                    component: () => import('@/views/pages/ClassroomSchedulesManage.vue'),
+                    meta: { breadcrumb: 'Grades horárias', requiresScheduleEditor: true }
                 },
                 {
                     path: '/subjects',
@@ -189,6 +218,11 @@ const router = createRouter({
                     component: () => import('@/views/pages/coordination/PlanningReview.vue')
                 },
                 {
+                    path: '/coordination/planning-guard',
+                    name: 'planning-guard-manage',
+                    component: () => import('@/views/pages/coordination/PlanningSubmissionGuardManage.vue')
+                },
+                {
                     path: '/coordination/observations',
                     name: 'observations',
                     component: () => import('@/views/pages/coordination/ObservationList.vue')
@@ -212,6 +246,11 @@ const router = createRouter({
                     path: '/coordination/relatorios',
                     name: 'student-report-approval',
                     component: () => import('@/views/pages/coordination/StudentReportApproval.vue')
+                },
+                {
+                    path: '/coordination/auditoria',
+                    name: 'coordination-audit-logs',
+                    component: () => import('@/views/pages/coordination/AuditLogs.vue')
                 },
                 // --- COMUNICAÇÃO ---
                 {
@@ -256,7 +295,8 @@ router.beforeEach(async (to, from, next) => {
 
     // 1. Tenta restaurar a sessão se tiver token (F5 na página)
     // CORREÇÃO: Usamos a chave 'token', não 'access_token'
-    if (localStorage.getItem('token') && !authStore.user) {
+    const storedToken = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (storedToken && !authStore.user) {
         try {
             await authStore.fetchUser();
         } catch (e) {
@@ -269,6 +309,8 @@ router.beforeEach(async (to, from, next) => {
         next({ name: 'login' });
     } else if (to.name === 'login' && authStore.isAuthenticated) {
         next({ name: 'dashboard' });
+    } else if (to.matched.some((r) => r.meta.requiresScheduleEditor) && !authStore.canEditClassSchedule) {
+        next({ name: 'accessDenied' });
     } else {
         next();
     }

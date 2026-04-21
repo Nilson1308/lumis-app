@@ -5,15 +5,19 @@ from django.utils.encoding import force_bytes, force_str
 from django.core.mail import send_mail
 from django.utils.html import strip_tags
 from django.contrib.auth import get_user_model
+from django.http import HttpResponse
+import csv
 from django.db.models import Q
-from rest_framework import viewsets, status
+from django.db.utils import ProgrammingError, OperationalError
+from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from apps.core.pagination import LargeResultsSetPagination
-from .models import SchoolAccount, Notification
-from .serializers import UserSerializer, SchoolAccountSerializer, NotificationSerializer
+from .models import SchoolAccount, Notification, AccessAuditLog
+from .serializers import UserSerializer, SchoolAccountSerializer, NotificationSerializer, AccessAuditLogSerializer
+from apps.core.audit import register_access_audit
 
 User = get_user_model()
 
@@ -33,7 +37,10 @@ class PasswordResetRequestView(APIView):
             reset_link = f"https://app.sthomasmogi.com.br/reset-password/{uid}/{token}/"
             
             # 2. Identidade Visual (Copia a lógica do Admin)
-            school = SchoolAccount.objects.first()
+            try:
+                school = SchoolAccount.objects.first()
+            except (ProgrammingError, OperationalError):
+                school = None
             if school and school.logo:
                 base_url = "https://app.sthomasmogi.com.br" # Ajuste se necessário
                 logo_url = f"{base_url}{school.logo.url}"
@@ -142,6 +149,19 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('first_name')
     serializer_class = UserSerializer
     pagination_class = LargeResultsSetPagination 
+    permission_classes = [permissions.IsAuthenticated]
+
+    _POWER_GROUPS = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Direcao', 'Diretoria', 'Secretaria']
+
+    def _is_power_user(self, user):
+        return user.is_superuser or user.is_staff or user.groups.filter(name__in=self._POWER_GROUPS).exists()
+
+    def get_permissions(self):
+        # Somente usuários de gestão podem listar/gerenciar usuários.
+        if self.action in ['list', 'retrieve', 'create', 'update', 'partial_update', 'destroy']:
+            if not self._is_power_user(self.request.user):
+                return [permissions.IsAdminUser()]
+        return super().get_permissions()
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -165,6 +185,46 @@ class UserViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
 
+    def perform_create(self, serializer):
+        user = serializer.save()
+        register_access_audit(
+            request=self.request,
+            action='USER_CREATE',
+            resource_type='user',
+            resource_id=user.id,
+            details={'username': user.username}
+        )
+
+    def perform_update(self, serializer):
+        previous = self.get_object()
+        old_groups = list(previous.groups.values_list('name', flat=True))
+        user = serializer.save()
+        new_groups = list(user.groups.values_list('name', flat=True))
+        register_access_audit(
+            request=self.request,
+            action='USER_UPDATE',
+            resource_type='user',
+            resource_id=user.id,
+            details={
+                'username': user.username,
+                'groups_before': old_groups,
+                'groups_after': new_groups,
+                'is_superuser': user.is_superuser,
+            }
+        )
+
+    def perform_destroy(self, instance):
+        user_id = instance.id
+        username = instance.username
+        super().perform_destroy(instance)
+        register_access_audit(
+            request=self.request,
+            action='USER_DELETE',
+            resource_type='user',
+            resource_id=user_id,
+            details={'username': username}
+        )
+
 class SchoolConfigView(APIView):
     """
     Retorna a configuração da escola ativa para personalizar o Frontend (White Label).
@@ -175,7 +235,11 @@ class SchoolConfigView(APIView):
     def get(self, request):
         # Pega a primeira configuração encontrada (Single Tenant)
         # Se no futuro for multi-tenant, aqui entra a lógica de domínios
-        config = SchoolAccount.objects.first()
+        try:
+            config = SchoolAccount.objects.first()
+        except (ProgrammingError, OperationalError):
+            # Fallback seguro quando houver deploy sem migração aplicada.
+            return Response(status=404)
         
         if config:
             serializer = SchoolAccountSerializer(config, context={'request': request})
@@ -203,3 +267,62 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def mark_all_read(self, request):
         self.get_queryset().update(read=True)
         return Response({'status': 'all_read'})
+
+
+class AccessAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = AccessAuditLogSerializer
+    pagination_class = LargeResultsSetPagination
+    permission_classes = [permissions.IsAuthenticated]
+
+    _POWER_GROUPS = ['Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Direcao', 'Diretoria', 'Secretaria']
+
+    def get_queryset(self):
+        user = self.request.user
+        if not (user.is_superuser or user.groups.filter(name__in=self._POWER_GROUPS).exists()):
+            return AccessAuditLog.objects.none()
+
+        qs = AccessAuditLog.objects.all().select_related('user')
+        action = self.request.query_params.get('action')
+        resource_type = self.request.query_params.get('resource_type')
+        username = self.request.query_params.get('username')
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+
+        if action:
+            qs = qs.filter(action__icontains=action)
+        if resource_type:
+            qs = qs.filter(resource_type__icontains=resource_type)
+        if username:
+            qs = qs.filter(user__username__icontains=username)
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+        return qs.order_by('-created_at')
+
+    @action(detail=False, methods=['get'], url_path='export-csv')
+    def export_csv(self, request):
+        qs = self.filter_queryset(self.get_queryset())
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        response['Content-Disposition'] = 'attachment; filename="auditoria-lumis.csv"'
+        writer = csv.writer(response)
+        writer.writerow([
+            'DataHora', 'Usuario', 'Acao', 'Severidade', 'Recurso', 'RecursoID',
+            'AlunoID', 'IP', 'UserAgent', 'Detalhes'
+        ])
+
+        serializer = self.get_serializer(qs, many=True)
+        for item in serializer.data:
+            writer.writerow([
+                item.get('created_at', ''),
+                item.get('username', ''),
+                item.get('action', ''),
+                item.get('severity', ''),
+                item.get('resource_type', ''),
+                item.get('resource_id', ''),
+                item.get('student_id', ''),
+                item.get('ip_address', ''),
+                item.get('user_agent', ''),
+                str(item.get('details', {})),
+            ])
+        return response

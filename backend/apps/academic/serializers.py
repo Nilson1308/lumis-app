@@ -307,61 +307,79 @@ class SimpleUserSerializer(serializers.ModelSerializer):
 class ParentStudentSerializer(serializers.ModelSerializer):
     # Usamos SerializerMethodField para ter controle total da busca
     classroom_name = serializers.SerializerMethodField()
+    classroom_id = serializers.SerializerMethodField()
     segment_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
         fields = [
-            'id', 'name', 'registration_number', 'classroom_name', 'segment_name', 'birth_date',
+            'id', 'name', 'registration_number', 'classroom_id', 'classroom_name', 'segment_name', 'birth_date',
             'emergency_contact', 'allergies', 'medications', # Já usamos antes
+            'medical_report',
+            'prescription',
             # Novos campos de endereço:
             'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state'
         ]
 
-    def get_classroom_name(self, obj):
-        # Tenta pegar via 'enrollment_set' (padrão) ou 'enrollments' (se foi customizado)
+    def _latest_enrollment(self, obj):
         enrolls = getattr(obj, 'enrollment_set', getattr(obj, 'enrollments', None))
-        
-        if enrolls:
-            last_enrollment = enrolls.last() # Pega a última matrícula
-            if last_enrollment and last_enrollment.classroom:
-                return last_enrollment.classroom.name
+        if not enrolls:
+            return None
+        active = enrolls.filter(active=True).order_by('-id').first()
+        if active:
+            return active
+        return enrolls.order_by('-id').first()
+
+    def get_classroom_id(self, obj):
+        enrollment = self._latest_enrollment(obj)
+        if enrollment and enrollment.classroom_id:
+            return enrollment.classroom_id
+        return None
+
+    def get_classroom_name(self, obj):
+        enrollment = self._latest_enrollment(obj)
+        if enrollment and enrollment.classroom:
+            return enrollment.classroom.name
         return "Sem Turma"
 
     def get_segment_name(self, obj):
-        enrolls = getattr(obj, 'enrollment_set', getattr(obj, 'enrollments', None))
-        
-        if enrolls:
-            last_enrollment = enrolls.last()
-            if last_enrollment and last_enrollment.classroom and last_enrollment.classroom.segment:
-                return last_enrollment.classroom.segment.name
+        enrollment = self._latest_enrollment(obj)
+        if enrollment and enrollment.classroom and enrollment.classroom.segment:
+            return enrollment.classroom.segment.name
         return "-"
 
 class GuardianProfileUpdateSerializer(serializers.ModelSerializer):
     """ Permite ao pai editar apenas seus dados de contato """
     class Meta:
         model = Guardian
-        fields = ['email', 'phone', 'email', 'secondary_phone']
+        fields = ['email', 'phone', 'secondary_phone']
 
 class StudentHealthUpdateSerializer(serializers.ModelSerializer):
     """ Permite ao pai editar apenas saúde e emergência do filho """
     class Meta:
         model = Student
         fields = [
-            'emergency_contact', 
-            'allergies', 
+            'emergency_contact',
+            'allergies',
             'medications',
-            'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state' 
+            'zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state',
+            'medical_report',
+            'prescription',
         ]
 
 class TaughtContentSerializer(serializers.ModelSerializer):
     # Campos auxiliares apenas para leitura (display)
+    subject_id = serializers.IntegerField(source='assignment.subject.id', read_only=True)
     subject_name = serializers.CharField(source='assignment.subject.name', read_only=True)
+    teacher_name = serializers.CharField(source='assignment.teacher.get_full_name', read_only=True)
     classroom_name = serializers.CharField(source='assignment.classroom.name', read_only=True)
 
     class Meta:
         model = TaughtContent
-        fields = ['id', 'assignment', 'date', 'content', 'homework', 'created_at', 'subject_name', 'classroom_name']
+        fields = [
+            'id', 'assignment', 'date', 'content', 'homework', 'created_at',
+            'subject_id', 'subject_name', 'teacher_name', 'classroom_name'
+        ]
     
     def validate_date(self, value):
         """Permite registrar aulas em qualquer data (passado, presente ou futuro)"""

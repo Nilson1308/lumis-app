@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '@/service/api';
 import { useToast } from 'primevue/usetoast';
 import { useAuthStore } from '@/stores/auth';
 import StudentViewDialog from '@/components/StudentViewDialog.vue';
 import ClassroomSchedule from '@/components/ClassroomSchedule.vue';
+import ClassroomGradesOverviewDialog from '@/components/ClassroomGradesOverviewDialog.vue';
 
 const authStore = useAuthStore();
 
@@ -14,6 +15,12 @@ const route = useRoute();
 const router = useRouter();
 const toast = useToast();
 const activeTab = ref(0);
+/** Índice do separador «Grade Horária» no TabView (0=Alunos, 1=Corpo docente, 2=Grade). */
+const SCHEDULE_TAB_INDEX = 2;
+
+const showClassroomSchedule = computed(
+    () => Boolean(data.value.classroom?.id) && Number(activeTab.value) === SCHEDULE_TAB_INDEX
+);
 
 const loading = ref(true);
 const classroomId = route.params.id;
@@ -26,6 +33,20 @@ const data = ref({
 
 const showStudentDialog = ref(false);
 const selectedStudentId = ref(null);
+const periods = ref([]);
+const assignments = ref([]);
+const classroomEnrollments = ref([]);
+const selectedPeriod = ref(null);
+const selectedEnrollmentId = ref(null);
+const loadingPdf = ref(false);
+const academicDialogVisible = ref(false);
+const reportsDialogVisible = ref(false);
+const periodStorageKey = computed(() => `classroom-detail:${classroomId}:selected-period`);
+
+const isCoordinatorAccess = computed(() => authStore.isCoordinator || authStore.isAdmin || authStore.isSecretary);
+
+/** Grade horária: só gestão escolar edita; professores e responsáveis só veem. */
+const scheduleReadOnly = computed(() => !authStore.canEditClassSchedule);
 
 const loadDashboard = async () => {
     loading.value = true;
@@ -37,6 +58,37 @@ const loadDashboard = async () => {
         router.push('classrooms');
     } finally {
         loading.value = false;
+    }
+};
+
+const loadAcademicDependencies = async () => {
+    if (!isCoordinatorAccess.value) return;
+    try {
+        const [periodsRes, assignmentsRes, enrollmentsRes] = await Promise.all([
+            api.get('periods/'),
+            api.get(`assignments/?classroom=${classroomId}&page_size=1000`),
+            api.get(`enrollments/?classroom=${classroomId}&page_size=1000`)
+        ]);
+
+        periods.value = periodsRes.data.results || periodsRes.data || [];
+        assignments.value = (assignmentsRes.data.results || assignmentsRes.data || []).map((a) => ({
+            id: a.id,
+            label: `${a.subject_name} - ${a.teacher_name || 'Sem professor'}`,
+            subjectId: a.subject,
+            subjectName: a.subject_name,
+            teacherName: a.teacher_name || 'Sem professor'
+        }));
+        classroomEnrollments.value = (enrollmentsRes.data.results || enrollmentsRes.data || []).map((e) => ({
+            id: e.id,
+            label: e.student_name
+        }));
+
+        const savedPeriod = Number(localStorage.getItem(periodStorageKey.value));
+        const hasSaved = periods.value.some((p) => p.id === savedPeriod);
+        const activePeriod = periods.value.find((p) => p.is_active);
+        selectedPeriod.value = hasSaved ? savedPeriod : (activePeriod?.id || periods.value[0]?.id || null);
+    } catch (e) {
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Não foi possível carregar ações pedagógicas.', life: 3000 });
     }
 };
 
@@ -54,8 +106,83 @@ const openStudent = (studentId) => {
     showStudentDialog.value = true;
 };
 
+const openAcademicDialog = () => {
+    academicDialogVisible.value = true;
+};
+
+const openReportsDialog = () => {
+    reportsDialogVisible.value = true;
+};
+
+const openReportPdf = async (type) => {
+    if (!selectedPeriod.value) {
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione o período.', life: 3000 });
+        return;
+    }
+    loadingPdf.value = true;
+    try {
+        const endpoint = type === 'diary' ? 'reports/diary-pdf/' : 'reports/attendance-pdf/';
+        const { data: blob } = await api.get(endpoint, {
+            params: { classroom: classroomId, period: selectedPeriod.value },
+            responseType: 'blob'
+        });
+        const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        window.open(url, '_blank');
+        reportsDialogVisible.value = false;
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao gerar relatório PDF.', life: 3000 });
+    } finally {
+        loadingPdf.value = false;
+    }
+};
+
+const openStudentReportCardPdf = async () => {
+    if (!selectedEnrollmentId.value) {
+        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione um aluno para o boletim.', life: 3000 });
+        return;
+    }
+    loadingPdf.value = true;
+    try {
+        let endpoint = `reports/student_card/${selectedEnrollmentId.value}/`;
+        if (selectedPeriod.value) {
+            endpoint += `?period=${selectedPeriod.value}`;
+        }
+        const { data: blob } = await api.get(endpoint, { responseType: 'blob' });
+        const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        window.open(url, '_blank');
+        reportsDialogVisible.value = false;
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao gerar boletim PDF.', life: 3000 });
+    } finally {
+        loadingPdf.value = false;
+    }
+};
+
+watch(selectedPeriod, (newValue) => {
+    if (newValue && isCoordinatorAccess.value) {
+        localStorage.setItem(periodStorageKey.value, String(newValue));
+    }
+});
+
+function applyTabFromRouteQuery() {
+    if (route.query.tab === 'schedule') {
+        activeTab.value = SCHEDULE_TAB_INDEX;
+    }
+}
+
+watch(
+    () => [route.params.id, route.query.tab],
+    () => {
+        applyTabFromRouteQuery();
+    },
+    { immediate: true }
+);
+
 onMounted(() => {
     loadDashboard();
+    loadAcademicDependencies();
 });
 </script>
 
@@ -68,6 +195,19 @@ onMounted(() => {
                 <div>
                     <h2 class="font-bold text-900" style="margin-bottom: 0 !important">{{ data.classroom.name }}</h2>
                     <span class="text-500">{{ data.classroom.segment }} • {{ data.classroom.year }}</span>
+                </div>
+            </div>
+
+            <div v-if="isCoordinatorAccess" class="card mb-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2 text-primary-700 font-semibold">
+                        <i class="pi pi-briefcase"></i>
+                        <span>Ações da Coordenação</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                    <Button label="Painel de Notas" icon="pi pi-chart-line" @click="openAcademicDialog" />
+                    <Button label="Relatórios PDF" icon="pi pi-file-pdf" severity="secondary" @click="openReportsDialog" />
+                    </div>
                 </div>
             </div>
 
@@ -179,10 +319,11 @@ onMounted(() => {
                     </TabPanel>
 
                     <TabPanel header="Grade Horária">
-                        <ClassroomSchedule 
-                            :classroomId="data.classroom.id" 
-                            :readOnly="authStore.isTeacher && !authStore.isCoordinator && !authStore.isAdmin"
-                            v-if="activeTab === 2 && data.classroom.id" 
+                        <ClassroomSchedule
+                            v-if="showClassroomSchedule"
+                            :key="data.classroom.id"
+                            :classroom-id="data.classroom.id"
+                            :read-only="scheduleReadOnly"
                         />
                     </TabPanel>
                 </TabView>
@@ -191,6 +332,53 @@ onMounted(() => {
                 v-model:visible="showStudentDialog" 
                 :studentId="selectedStudentId" 
             />
+
+            <ClassroomGradesOverviewDialog
+                v-model:visible="academicDialogVisible"
+                v-model:selectedPeriod="selectedPeriod"
+                :classroomId="classroomId"
+                :periods="periods"
+                :assignments="assignments"
+                :enrollments="classroomEnrollments"
+            />
+
+            <Dialog v-model:visible="reportsDialogVisible" header="Relatórios PDF" :modal="true" :style="{ width: '560px' }">
+                <div class="grid grid-cols-12 gap-3">
+                    <div class="col-span-12">
+                        <label class="font-bold block mb-2">Período</label>
+                        <Dropdown
+                            v-model="selectedPeriod"
+                            :options="periods"
+                            optionLabel="name"
+                            optionValue="id"
+                            placeholder="Selecione o período"
+                            class="w-full"
+                            autofocus
+                        />
+                    </div>
+                    <div class="col-span-12 flex flex-wrap gap-2">
+                        <Button label="Diário da Turma (PDF)" icon="pi pi-file-pdf" :loading="loadingPdf" :disabled="!selectedPeriod" @click="openReportPdf('diary')" />
+                        <Button label="Frequências (PDF)" icon="pi pi-file-pdf" severity="secondary" :loading="loadingPdf" :disabled="!selectedPeriod" @click="openReportPdf('attendance')" />
+                    </div>
+                    <div class="col-span-12 mt-2">
+                        <Divider />
+                        <span class="block text-600 mb-2">Boletim individual</span>
+                        <Dropdown
+                            v-model="selectedEnrollmentId"
+                            :options="classroomEnrollments"
+                            optionLabel="label"
+                            optionValue="id"
+                            placeholder="Selecione o aluno"
+                            class="w-full"
+                            filter
+                        />
+                    </div>
+                </div>
+                <template #footer>
+                    <Button label="Fechar" icon="pi pi-times" class="p-button-text" @click="reportsDialogVisible = false" />
+                    <Button label="Gerar Boletim (PDF)" icon="pi pi-download" :loading="loadingPdf" :disabled="!selectedEnrollmentId" @click="openStudentReportCardPdf" />
+                </template>
+            </Dialog>
         </div>
 
         <div v-else class="col-12 flex justify-center items-center" style="height: 50vh">

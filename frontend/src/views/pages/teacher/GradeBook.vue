@@ -16,6 +16,50 @@ const students = ref([]);
 const periods = ref([]);
 const selectedPeriod = ref(null);
 const loading = ref(true);
+const savingGrade = ref(false);
+
+const dedupeById = (items = []) => {
+    const map = new Map();
+    items.forEach((item) => {
+        if (item?.id != null && !map.has(item.id)) {
+            map.set(item.id, item);
+        }
+    });
+    return Array.from(map.values());
+};
+
+const getPaginatedItems = async (endpoint, params = {}) => {
+    const items = [];
+    let page = 1;
+
+    while (true) {
+        const response = await api.get(endpoint, {
+            params: {
+                ...params,
+                page_size: params.page_size || 1000,
+                page
+            }
+        });
+
+        const data = response.data;
+
+        // Endpoint sem paginação DRF
+        if (Array.isArray(data)) {
+            return data;
+        }
+
+        const pageItems = Array.isArray(data?.results) ? data.results : [];
+        items.push(...pageItems);
+
+        // Critérios de parada
+        if (!data?.next) break;
+        if (pageItems.length === 0) break;
+
+        page += 1;
+    }
+
+    return items;
+};
 
 // --- DIALOG DE NOTA (Criação e Edição) ---
 const gradeDialog = ref(false);
@@ -44,9 +88,6 @@ const loadPeriods = async () => {
             selectedPeriod.value = periods.value[periods.value.length - 1].id;
         }
         
-        if (selectedPeriod.value) {
-            loadClassData();
-        }
     } catch (e) {
         console.error("Erro ao carregar períodos");
     }
@@ -63,18 +104,22 @@ const loadClassData = async () => {
             assignment.value = resAssign.data;
         }
 
-        // 2. Carrega Alunos (turma completa, sem corte por paginação da tela)
-        const resEnroll = await api.get(`enrollments/?classroom=${assignment.value.classroom}&page_size=1000`);
-        
-        // 3. Carrega Notas do Período
-        const resGrades = await api.get(`grades/?enrollment__classroom=${assignment.value.classroom}&subject=${assignment.value.subject}&period=${selectedPeriod.value}&page_size=1000`);
-        
-        const allGrades = resGrades.data.results || resGrades.data || [];
-        const allEnrollments = resEnroll.data.results || resEnroll.data || [];
+        // 2. Carrega todos os alunos da turma (percorrendo paginação do backend)
+        const allEnrollments = await getPaginatedItems('enrollments/', {
+            classroom: assignment.value.classroom
+        });
+
+        // 3. Carrega todas as notas do período (percorrendo paginação do backend)
+        const allGradesRaw = await getPaginatedItems('grades/', {
+            enrollment__classroom: assignment.value.classroom,
+            subject: assignment.value.subject,
+            period: selectedPeriod.value
+        });
+        const allGrades = dedupeById(allGradesRaw);
 
         // 4. Cruza os dados
         students.value = allEnrollments.map(enrollment => {
-            const studentGrades = allGrades.filter(g => g.enrollment === enrollment.id);
+            const studentGrades = dedupeById(allGrades.filter(g => g.enrollment === enrollment.id));
             
             // Cálculo Média Ponderada
             let weightedSum = 0;
@@ -99,7 +144,7 @@ const loadClassData = async () => {
         if (detailsDialog.value && currentStudent.value.id) {
             const updatedStudent = students.value.find(s => s.id === currentStudent.value.id);
             if (updatedStudent) {
-                selectedStudentGrades.value = updatedStudent.grades;
+                selectedStudentGrades.value = dedupeById(updatedStudent.grades);
             }
         }
 
@@ -111,7 +156,9 @@ const loadClassData = async () => {
 };
 
 watch(selectedPeriod, () => {
-    loadClassData();
+    if (selectedPeriod.value) {
+        loadClassData();
+    }
 });
 
 // --- AÇÕES PRINCIPAIS ---
@@ -127,7 +174,7 @@ const openNewGradeDialog = (studentWrapper) => {
 // 2. Abrir Dialog de DETALHES (Ver todas as notas)
 const openDetailsDialog = (studentWrapper) => {
     currentStudent.value = studentWrapper;
-    selectedStudentGrades.value = studentWrapper.grades;
+    selectedStudentGrades.value = dedupeById(studentWrapper.grades);
     detailsDialog.value = true;
 };
 
@@ -144,11 +191,13 @@ const openEditGradeDialog = (grade) => {
 
 // 4. Salvar (Create ou Update)
 const saveGrade = async () => {
+    if (savingGrade.value) return;
     if (!gradeForm.value.name || gradeForm.value.value === null) {
         toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha os dados.', life: 3000 });
         return;
     }
 
+    savingGrade.value = true;
     try {
         const payload = {
             enrollment: currentStudent.value.id,
@@ -174,6 +223,8 @@ const saveGrade = async () => {
         
     } catch (error) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao salvar nota.', life: 3000 });
+    } finally {
+        savingGrade.value = false;
     }
 };
 
@@ -288,7 +339,7 @@ onMounted(() => {
                 </div>
                 <template #footer>
                     <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="gradeDialog = false" />
-                    <Button label="Salvar" icon="pi pi-check" @click="saveGrade" />
+                    <Button label="Salvar" icon="pi pi-check" :loading="savingGrade" @click="saveGrade" />
                 </template>
             </Dialog>
 

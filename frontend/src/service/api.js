@@ -12,7 +12,7 @@ const api = axios.create({
 // Antes de qualquer requisição sair do Vue, esse código roda.
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
         if (token) {
             // O Django espera: "Bearer <token>"
             config.headers.Authorization = `Bearer ${token}`;

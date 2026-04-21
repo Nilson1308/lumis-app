@@ -480,6 +480,45 @@ class LessonPlanFile(models.Model):
     def __str__(self):
         return self.name or self.file.name
 
+
+class LessonPlanSubmissionBlock(models.Model):
+    """Bloqueio manual/automático de envio de planejamento para professores."""
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='lesson_plan_blocks',
+        verbose_name='Professor',
+    )
+    active = models.BooleanField('Ativo', default=True)
+    reason = models.TextField('Motivo', blank=True)
+    blocked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lesson_plan_blocks_created',
+        verbose_name='Bloqueado por',
+    )
+    released_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lesson_plan_blocks_released',
+        verbose_name='Liberado por',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Bloqueio de Envio de Planejamento'
+        verbose_name_plural = 'Bloqueios de Envio de Planejamento'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        status = 'Ativo' if self.active else 'Liberado'
+        return f'{self.teacher.username} - {status}'
+
 class TaughtContent(models.Model):
     """Registro diário do Conteúdo Ministrado"""
     assignment = models.ForeignKey(TeacherAssignment, on_delete=models.CASCADE, verbose_name="Atribuição")

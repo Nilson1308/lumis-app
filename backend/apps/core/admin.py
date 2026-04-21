@@ -1,10 +1,38 @@
 from django.contrib import admin
+from django import forms
 from django.contrib.auth.admin import UserAdmin
 from django.core.mail import send_mail
 from django.utils.crypto import get_random_string
 from django.utils.html import strip_tags
 from django.conf import settings
-from .models import User, SchoolAccount
+from .models import User, SchoolAccount, AccessAuditLog
+from apps.academic.models import SchoolEvent
+from apps.core.audit import register_access_audit
+
+
+class SchoolAccountAdminForm(forms.ModelForm):
+    non_teaching_event_types = forms.MultipleChoiceField(
+        choices=SchoolEvent.EVENT_TYPES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        label="Tipos não letivos no calendário",
+        help_text="Marque os tipos de evento que não exigem chamada.",
+    )
+
+    class Meta:
+        model = SchoolAccount
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['non_teaching_event_types'].initial = (
+                self.instance.non_teaching_event_types or ['HOLIDAY']
+            )
+
+    def clean_non_teaching_event_types(self):
+        values = self.cleaned_data.get('non_teaching_event_types') or ['HOLIDAY']
+        return [str(value).upper() for value in values]
 
 # --- FUNÇÃO AUXILIAR: GERAR HTML DO EMAIL ---
 def montar_email_credenciais(user, password, school):
@@ -142,9 +170,69 @@ class CustomUserAdmin(UserAdmin):
 
 @admin.register(SchoolAccount)
 class SchoolAccountAdmin(admin.ModelAdmin):
+    form = SchoolAccountAdminForm
     list_display = ('name', 'slug', 'primary_color')
     fieldsets = (
         ('Identificação', {'fields': ('name', 'slug', 'logo', 'icon')}),
         ('Cores do Sistema', {'fields': ('primary_color', 'secondary_color')}),
+        ('Calendário & Frequência', {'fields': ('non_teaching_event_types',)}),
+        ('Planejamento Semanal', {'fields': ('enforce_lesson_plan_submission_guard',)}),
         ('Contato', {'fields': ('email', 'phone', 'address', 'website')}),
     )
+    readonly_fields = ('attendance_rules_hint',)
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        fieldsets.insert(
+            3,
+            (
+                'Impacto no Controle de Presença',
+                {
+                    'fields': ('attendance_rules_hint',),
+                    'description': (
+                        "Os tipos marcados como não letivos são ignorados no controle de frequência: "
+                        "não permitem lançamento de chamada, não geram pendência e não disparam alerta para professores."
+                    ),
+                },
+            ),
+        )
+        return fieldsets
+
+    @admin.display(description='Regra aplicada')
+    def attendance_rules_hint(self, obj):
+        return "A configuração abaixo define quais eventos do calendário não exigem chamada."
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        register_access_audit(
+            request=request,
+            action='SCHOOL_ACCOUNT_UPDATE' if change else 'SCHOOL_ACCOUNT_CREATE',
+            resource_type='school_account',
+            resource_id=obj.id,
+            details={
+                'name': obj.name,
+                'slug': obj.slug,
+                'enforce_lesson_plan_submission_guard': obj.enforce_lesson_plan_submission_guard,
+                'non_teaching_event_types': obj.non_teaching_event_types,
+            }
+        )
+
+    def delete_model(self, request, obj):
+        obj_id = obj.id
+        obj_name = obj.name
+        super().delete_model(request, obj)
+        register_access_audit(
+            request=request,
+            action='SCHOOL_ACCOUNT_DELETE',
+            resource_type='school_account',
+            resource_id=obj_id,
+            details={'name': obj_name}
+        )
+
+
+@admin.register(AccessAuditLog)
+class AccessAuditLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'action', 'resource_type', 'resource_id', 'student_id', 'user', 'ip_address')
+    search_fields = ('action', 'resource_type', 'resource_id', 'user__username', 'user__email')
+    list_filter = ('action', 'resource_type', 'created_at')
+    readonly_fields = ('created_at', 'user', 'action', 'resource_type', 'resource_id', 'student_id', 'ip_address', 'user_agent', 'details')

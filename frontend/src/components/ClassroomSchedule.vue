@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 
@@ -16,17 +16,80 @@ const props = defineProps({
 });
 
 const toast = useToast();
+
+/** Mensagem amigável para erros da API de grade (ex.: 403 da coordenação). */
+const scheduleApiError = (e, fallback) => {
+    const status = e.response?.status;
+    const d = e.response?.data;
+    if (status === 403) {
+        return (
+            (typeof d?.detail === 'string' && d.detail) ||
+            'Sem permissão: a grade horária só pode ser alterada pela coordenação, direção ou secretaria.'
+        );
+    }
+    if (status === 400 && d?.non_field_errors?.[0]) return d.non_field_errors[0];
+    if (typeof d?.detail === 'string' && d.detail) return d.detail;
+    return fallback;
+};
+
 const events = ref([]);
-const assignments = ref([]); 
+const assignments = ref([]);
 const dialogVisible = ref(false);
 const loading = ref(false);
+/** Força o FullCalendar a redesenhar quando os eventos chegam da API. */
+const calendarRenderKey = ref(0);
+/** null = criar; número = editar horário existente */
+const editingScheduleId = ref(null);
+
+const DAY_OPTIONS = [
+    { label: 'Segunda-feira', value: 1 },
+    { label: 'Terça-feira', value: 2 },
+    { label: 'Quarta-feira', value: 3 },
+    { label: 'Quinta-feira', value: 4 },
+    { label: 'Sexta-feira', value: 5 },
+    { label: 'Sábado', value: 6 },
+    { label: 'Domingo', value: 0 }
+];
 
 const newSchedule = ref({
+    classroom: null,
     assignment: null,
     day_of_week: null,
     start_time: null,
     end_time: null
 });
+
+const dialogHeader = computed(() =>
+    editingScheduleId.value ? 'Editar horário' : 'Nova aula'
+);
+
+const parseTimeStringToDate = (t) => {
+    if (!t) return null;
+    if (t instanceof Date) return t;
+    const parts = String(t).split(':');
+    const h = Number(parts[0]) || 0;
+    const m = Number(parts[1]) || 0;
+    const s = Number(parts[2]) || 0;
+    const d = new Date();
+    d.setHours(h, m, s, 0);
+    return d;
+};
+
+const resetDialog = () => {
+    editingScheduleId.value = null;
+    newSchedule.value = {
+        classroom: props.classroomId,
+        assignment: null,
+        day_of_week: 1,
+        start_time: null,
+        end_time: null
+    };
+};
+
+const refreshAll = () => {
+    loadSchedule();
+    loadAssignments();
+};
 
 // Detecção de mobile
 const isMobile = ref(window.innerWidth < 768);
@@ -34,11 +97,6 @@ const isMobile = ref(window.innerWidth < 768);
 const updateMobile = () => {
     isMobile.value = window.innerWidth < 768;
 };
-
-onMounted(() => {
-    window.addEventListener('resize', updateMobile);
-    updateMobile();
-});
 
 onUnmounted(() => {
     window.removeEventListener('resize', updateMobile);
@@ -74,10 +132,15 @@ const calendarOptions = computed(() => ({
 }));
 
 const loadSchedule = async () => {
+    if (!props.classroomId) return;
     loading.value = true;
     try {
-        const res = await api.get(`schedules/?classroom=${props.classroomId}`);
-        events.value = res.data.results.map(item => ({
+        const res = await api.get(
+            `schedules/?classroom=${props.classroomId}&page_size=500`
+        );
+        const raw = res.data?.results ?? res.data;
+        const list = Array.isArray(raw) ? raw : [];
+        events.value = list.map((item) => ({
             id: item.id,
             title: `${item.subject_name}\n(${item.teacher_name})`,
             daysOfWeek: [item.day_of_week],
@@ -87,17 +150,26 @@ const loadSchedule = async () => {
             borderColor: '#3B82F6',
             extendedProps: { ...item }
         }));
+        calendarRenderKey.value += 1;
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Erro ao carregar grade.', life: 3000 });
+        toast.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: scheduleApiError(e, 'Erro ao carregar grade.'),
+            life: 4000
+        });
     } finally {
         loading.value = false;
     }
 };
 
 const loadAssignments = async () => {
+    if (!props.classroomId) return;
     try {
-        const res = await api.get(`assignments/?classroom=${props.classroomId}`);
-        assignments.value = res.data.results.map(a => {
+        const res = await api.get(`assignments/?classroom=${props.classroomId}&page_size=500`);
+        const raw = res.data?.results ?? res.data;
+        const list = Array.isArray(raw) ? raw : [];
+        assignments.value = list.map((a) => {
             const subject = a.subject?.name || a.subject_name || 'Matéria s/ nome';
             let teacher = 'Sem Prof.';
             if (a.teacher) {
@@ -117,18 +189,41 @@ const loadAssignments = async () => {
     }
 };
 
+const openNewDialogManual = () => {
+    if (props.readOnly) return;
+    resetDialog();
+    dialogVisible.value = true;
+};
+
 const handleDateSelect = (selectInfo) => {
-    if (props.readOnly) return; // Não permite selecionar se for somente leitura
-    
+    if (props.readOnly) return;
+
     const start = selectInfo.start;
     const end = selectInfo.end;
-    
+    editingScheduleId.value = null;
     newSchedule.value = {
         classroom: props.classroomId,
         day_of_week: start.getDay(),
-        start_time: start, 
-        end_time: end,     
+        start_time: start,
+        end_time: end,
         assignment: null
+    };
+    dialogVisible.value = true;
+    try {
+        selectInfo.view.calendar.unselect();
+    } catch {
+        /* ignore */
+    }
+};
+
+const openEditDialog = (raw) => {
+    editingScheduleId.value = raw.id;
+    newSchedule.value = {
+        classroom: props.classroomId,
+        assignment: raw.assignment,
+        day_of_week: raw.day_of_week,
+        start_time: parseTimeStringToDate(raw.start_time),
+        end_time: parseTimeStringToDate(raw.end_time)
     };
     dialogVisible.value = true;
 };
@@ -154,41 +249,77 @@ const saveClass = async () => {
         return;
     }
 
-    // Prepara payload com formatação segura
     const payload = {
-        ...newSchedule.value,
+        classroom: Number(props.classroomId),
+        assignment: newSchedule.value.assignment,
+        day_of_week: newSchedule.value.day_of_week,
         start_time: formatTime(newSchedule.value.start_time),
         end_time: formatTime(newSchedule.value.end_time)
     };
 
     try {
-        await api.post('schedules/', payload);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aula agendada!', life: 3000 });
+        if (editingScheduleId.value) {
+            await api.patch(`schedules/${editingScheduleId.value}/`, payload);
+            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Horário atualizado.', life: 3000 });
+        } else {
+            await api.post('schedules/', payload);
+            toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Aula agendada!', life: 3000 });
+        }
         dialogVisible.value = false;
+        resetDialog();
         loadSchedule();
     } catch (e) {
-        const msg = e.response?.data?.non_field_errors?.[0] || 'Erro ao salvar. Verifique choque de horário.';
-        toast.add({ severity: 'error', summary: 'Erro', detail: msg, life: 3000 });
+        toast.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: scheduleApiError(e, 'Erro ao salvar. Verifique choque de horário.'),
+            life: 4000
+        });
     }
 };
 
 const handleEventClick = (clickInfo) => {
-    if (props.readOnly) return; // Não permite deletar se for somente leitura
-    
-    if (confirm(`Remover aula de ${clickInfo.event.title}?`)) {
-        api.delete(`schedules/${clickInfo.event.id}/`)
-            .then(() => {
-                toast.add({ severity: 'success', summary: 'Removido', detail: 'Aula removida.', life: 3000 });
-                clickInfo.event.remove();
-            });
+    if (props.readOnly) return;
+    const raw = clickInfo.event.extendedProps;
+    openEditDialog(raw);
+};
+
+const deleteCurrentSchedule = async () => {
+    if (!editingScheduleId.value) return;
+    if (!confirm('Remover este horário da grade?')) return;
+    try {
+        await api.delete(`schedules/${editingScheduleId.value}/`);
+        toast.add({ severity: 'success', summary: 'Removido', detail: 'Horário removido.', life: 3000 });
+        dialogVisible.value = false;
+        resetDialog();
+        loadSchedule();
+    } catch (e) {
+        toast.add({
+            severity: 'error',
+            summary: 'Erro',
+            detail: scheduleApiError(e, 'Não foi possível remover o horário.'),
+            life: 4000
+        });
     }
 };
 
+watch(
+    () => props.classroomId,
+    (id) => {
+        if (id) {
+            loadAssignments();
+            loadSchedule();
+        } else {
+            events.value = [];
+            assignments.value = [];
+        }
+    },
+    { immediate: true }
+);
+
 onMounted(() => {
-    if (props.classroomId) {
-        loadAssignments();
-        loadSchedule();
-    }
+    window.addEventListener('resize', updateMobile);
+    updateMobile();
 });
 </script>
 
@@ -197,12 +328,53 @@ onMounted(() => {
         <div v-if="readOnly" class="p-3 bg-blue-50 border-round-top">
             <div class="flex align-items-center gap-2 text-blue-700">
                 <i class="pi pi-info-circle"></i>
-                <span class="text-sm font-medium">Modo somente leitura - Professores não podem editar a grade horária</span>
+                <span class="text-sm font-medium"
+                    >Modo somente leitura — a edição da grade é feita pela coordenação, direção ou secretaria.</span>
             </div>
         </div>
-        <FullCalendar :options="calendarOptions" class="p-3" />
+        <div
+            v-if="!readOnly"
+            class="flex flex-wrap align-items-center justify-content-between gap-2 px-3 pt-3 border-bottom-1 surface-border"
+        >
+            <span class="text-600 text-sm line-height-3" style="max-width: 42rem">
+                Gestão: use «Nova aula» ou arraste no calendário para criar; clique num bloco para editar ou excluir.
+            </span>
+            <div class="flex flex-wrap gap-2">
+                <Button
+                    label="Atualizar"
+                    icon="pi pi-refresh"
+                    class="p-button-outlined p-button-sm"
+                    :loading="loading"
+                    @click="refreshAll"
+                />
+                <Button label="Nova aula" icon="pi pi-plus" class="p-button-sm" @click="openNewDialogManual" />
+            </div>
+        </div>
+        <FullCalendar
+            :key="`sched-${props.classroomId}-${calendarRenderKey}`"
+            :options="calendarOptions"
+            class="p-3"
+        />
 
-        <Dialog v-model:visible="dialogVisible" header="Configurar Aula" :modal="true" :style="{ width: isMobile ? '95vw' : '450px', maxWidth: '450px' }" class="p-fluid">
+        <Dialog
+            v-model:visible="dialogVisible"
+            :header="dialogHeader"
+            :modal="true"
+            :style="{ width: isMobile ? '95vw' : '480px', maxWidth: '95vw' }"
+            class="p-fluid"
+            @hide="resetDialog"
+        >
+            <div class="field mb-3">
+                <label class="font-bold">Dia da semana</label>
+                <Dropdown
+                    v-model="newSchedule.day_of_week"
+                    :options="DAY_OPTIONS"
+                    optionLabel="label"
+                    optionValue="value"
+                    placeholder="Dia"
+                    class="w-full"
+                />
+            </div>
             <div class="field mb-3">
                 <label class="font-bold">Matéria / Professor</label>
                 <Dropdown 
@@ -247,12 +419,26 @@ onMounted(() => {
             </div>
             
             <small class="block mt-2 text-500">
-                <i class="pi pi-info-circle"></i> O dia da semana é definido automaticamente.
+                <i class="pi pi-info-circle"></i>
+                Ao criar pelo calendário, o dia é preenchido pelo slot; pode alterar antes de guardar.
             </small>
 
             <template #footer>
-                <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="dialogVisible = false" />
-                <Button label="Salvar Aula" icon="pi pi-check" @click="saveClass" />
+                <div class="flex flex-wrap justify-content-between gap-2 w-full">
+                    <Button
+                        v-if="editingScheduleId"
+                        label="Excluir"
+                        icon="pi pi-trash"
+                        severity="danger"
+                        class="p-button-outlined"
+                        @click="deleteCurrentSchedule"
+                    />
+                    <span v-else></span>
+                    <div class="flex gap-2">
+                        <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="dialogVisible = false" />
+                        <Button :label="editingScheduleId ? 'Guardar' : 'Agendar'" icon="pi pi-check" @click="saveClass" />
+                    </div>
+                </div>
             </template>
         </Dialog>
     </div>

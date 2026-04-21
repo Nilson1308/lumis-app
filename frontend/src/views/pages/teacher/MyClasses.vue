@@ -6,23 +6,29 @@ import api from '@/service/api';
 const router = useRouter();
 const myClasses = ref([]);
 const myContraturnos = ref([]);
+const pendingOverview = ref([]);
 const loading = ref(true);
 
 const fetchMyClasses = async () => {
     loading.value = true;
     try {
-        const [classesRes, contraturnosRes] = await Promise.all([
+        const [classesRes, contraturnosRes, pendingRes] = await Promise.all([
             api.get('assignments/my_classes/'),
-            api.get('contraturno-classrooms/my_contraturnos/').catch(() => ({ data: [] })) // Ignora erro se não houver contraturnos
+            api.get('contraturno-classrooms/my_contraturnos/').catch(() => ({ data: [] })), // Ignora erro se não houver contraturnos
+            api.get('attendance/pending-overview/').catch(() => ({ data: { items: [] } }))
         ]);
         myClasses.value = classesRes.data;
         myContraturnos.value = contraturnosRes.data || [];
+        pendingOverview.value = pendingRes.data?.items || [];
     } catch (error) {
         console.error("Erro ao carregar turmas", error);
     } finally {
         loading.value = false;
     }
 };
+
+const pendingByAssignment = (assignmentId) =>
+    pendingOverview.value.find((item) => Number(item.assignment) === Number(assignmentId));
 
 const openClassroom = (assignment) => {
     router.push({ 
@@ -159,6 +165,12 @@ onMounted(() => {
                                 class="p-button-outlined p-button-sm" 
                                 @click="openAttendance(item)" 
                             />
+                            <small v-if="pendingByAssignment(item.id)" class="col-span-2 text-orange-600">
+                                {{ pendingByAssignment(item.id).pending_count }} chamada(s) pendente(s)
+                                <span v-if="pendingByAssignment(item.id).first_pending_date_br">
+                                    desde {{ pendingByAssignment(item.id).first_pending_date_br }}
+                                </span>
+                            </small>
                             
                             <div class="col-span-2 relative">
                                 <Button

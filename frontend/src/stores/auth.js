@@ -20,7 +20,31 @@ export const useAuthStore = defineStore('auth', {
         },
 
         isCoordinator: (state) => {
-            return state.user?.groups?.includes('Coordenadores') || state.user?.groups?.includes('Coordenacao') || state.user?.is_superuser;
+            const g = state.user?.groups;
+            if (!g) return !!state.user?.is_superuser;
+            return (
+                state.user?.is_superuser ||
+                g.includes('Coordenadores') ||
+                g.includes('Coordenação') ||
+                g.includes('Coordenacao')
+            );
+        },
+
+        /** Quem pode CRUD da grade horária (espelha o backend ClassScheduleViewSet). */
+        canEditClassSchedule: (state) => {
+            if (state.user?.is_superuser) return true;
+            const g = state.user?.groups;
+            if (!g) return false;
+            const power = [
+                'Secretaria',
+                'Coordenadores',
+                'Coordenação',
+                'Coordenacao',
+                'Direção',
+                'Direcao',
+                'Diretoria'
+            ];
+            return power.some((name) => g.includes(name));
         },
 
         isTeacher: (state) => {
@@ -28,8 +52,13 @@ export const useAuthStore = defineStore('auth', {
         },
     
         isGuardian: (state) => {
-            // Verifica com e sem acento para garantir compatibilidade
-            return state.user?.groups?.includes('Responsáveis') || state.user?.groups?.includes('Responsaveis');
+            const g = state.user?.groups;
+            if (!g) return false;
+            return (
+                g.includes('Responsáveis') ||
+                g.includes('Responsaveis') ||
+                g.includes('Pais')
+            );
         },
         
         userRole: (state) => {
@@ -37,7 +66,12 @@ export const useAuthStore = defineStore('auth', {
             if (state.user?.groups?.includes('Secretaria')) return 'Secretaria';
             if (state.user?.groups?.includes('Coordenadores') || state.user?.groups?.includes('Coordenacao')) return 'Coordenação';
             if (state.user?.groups?.includes('Professores')) return 'Docente';
-            if (state.user?.groups?.includes('Responsáveis') || state.user?.groups?.includes('Responsaveis')) return 'Responsável';
+            if (
+                state.user?.groups?.includes('Responsáveis') ||
+                state.user?.groups?.includes('Responsaveis') ||
+                state.user?.groups?.includes('Pais')
+            )
+                return 'Responsável';
             return 'Colaborador';
         }
     },

@@ -1,11 +1,12 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import UserViewSet, SchoolConfigView, NotificationViewSet, PasswordResetRequestView, PasswordResetConfirmView
+from .views import UserViewSet, SchoolConfigView, NotificationViewSet, PasswordResetRequestView, PasswordResetConfirmView, AccessAuditLogViewSet
 
 router = DefaultRouter()
 # Isso cria a rota /api/users/ e /api/users/me/
 router.register(r'users', UserViewSet)
 router.register(r'notifications', NotificationViewSet, basename='notification')
+router.register(r'access-audits', AccessAuditLogViewSet, basename='access-audits')
 
 urlpatterns = [
     path('', include(router.urls)),

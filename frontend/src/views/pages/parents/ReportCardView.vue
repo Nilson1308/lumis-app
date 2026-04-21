@@ -94,17 +94,21 @@ const openPrintDialog = async () => {
 const generatePDF = () => {
     if (!studentId.value) return;
 
-    let url = `reports/student_card/${studentId.value}/`;
+    let url = `students/${studentId.value}/report-card-pdf/`;
     
     // Se escolheu um período específico, adiciona na URL
     if (selectedPrintPeriod.value) {
-        url += `?period=${selectedPrintPeriod.value}`;
+        url += `?academic_period=${selectedPrintPeriod.value}`;
     }
 
     loadingPDF.value = true;
 
     api.get(url, { responseType: 'blob' })
         .then(response => {
+            const contentType = response.headers['content-type'] || '';
+            if (!contentType.includes('application/pdf')) {
+                throw new Error('Resposta inválida para PDF.');
+            }
             const fileURL = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
             const fileLink = document.createElement('a');
             fileLink.href = fileURL;
@@ -113,8 +117,19 @@ const generatePDF = () => {
             fileLink.click();
             printDialog.value = false; // Fecha modal
         })
-        .catch(() => {
-            toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao gerar o PDF.' });
+        .catch(async (error) => {
+            let detail = 'Falha ao gerar o PDF.';
+            const data = error?.response?.data;
+            if (data instanceof Blob) {
+                try {
+                    const text = await data.text();
+                    const parsed = JSON.parse(text);
+                    detail = parsed.detail || parsed.error || detail;
+                } catch (_) {
+                    // mantém mensagem padrão
+                }
+            }
+            toast.add({ severity: 'error', summary: 'Erro', detail });
         })
         .finally(() => {
             loadingPDF.value = false;

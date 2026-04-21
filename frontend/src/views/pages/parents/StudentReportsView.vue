@@ -11,6 +11,11 @@ const studentName = ref('');
 const displayDialog = ref(false);
 const selectedReport = ref({});
 
+const stripHtml = (value) => {
+    if (!value) return '';
+    return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
 const loadData = async () => {
     try {
         const studentId = route.params.id;
@@ -88,7 +93,9 @@ onMounted(() => {
                 Professor: {{ selectedReport.teacher_name }}
             </div>
             <Divider/>
-            <div class="line-height-3 text-lg" v-html="selectedReport.content" style="overflow-wrap: break-word;"></div>
+            <div class="line-height-3 text-lg white-space-pre-line" style="overflow-wrap: break-word;">
+                {{ stripHtml(selectedReport.content) }}
+            </div>
             <Divider/>
             <template #footer>
                 <Button label="Fechar" icon="pi pi-check" @click="displayDialog = false" autofocus />

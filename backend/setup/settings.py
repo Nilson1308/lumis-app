@@ -14,6 +14,7 @@ from pathlib import Path
 import os
 from decouple import config
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 
 if os.name == 'nt':
     try:
@@ -28,13 +29,28 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-qfg!9y1l^y^i$zoaf4*43(3u$&)373&(x^v5y!8@k&pk!_9^c='
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*').split(',')
+# SECURITY WARNING: keep the secret key used in production secret!
+# Em produção (DEBUG=False), SECRET_KEY deve vir obrigatoriamente do ambiente.
+SECRET_KEY = config('SECRET_KEY', default='').strip()
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-only-not-for-production'
+    else:
+        raise ImproperlyConfigured('Defina a variável de ambiente SECRET_KEY (obrigatória com DEBUG=False).')
+
+_allowed_raw = config('ALLOWED_HOSTS', default='').strip()
+ALLOWED_HOSTS = [h.strip() for h in _allowed_raw.split(',') if h.strip()]
+if not ALLOWED_HOSTS:
+    if DEBUG:
+        ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'testserver']
+    else:
+        raise ImproperlyConfigured(
+            'Defina ALLOWED_HOSTS no ambiente (lista separada por vírgulas). '
+            'Não use wildcard em produção.'
+        )
 
 
 # Application definition

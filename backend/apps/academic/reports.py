@@ -58,8 +58,9 @@ def generate_student_report_card(request, enrollment_id):
     except Enrollment.DoesNotExist:
         return HttpResponse("Matrícula não encontrada", status=404)
 
-    # Verifica se foi solicitado um período específico
-    period_id = request.GET.get('period')
+    # Período acadêmico (bimestre). Use "academic_period" para não colidir com filtros
+    # de outros endpoints (ex.: Student.period = turno).
+    period_id = request.GET.get('academic_period') or request.GET.get('period')
     selected_period = None
     
     if period_id and period_id != 'null': # O Frontend pode mandar string 'null'

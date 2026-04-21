@@ -5,7 +5,7 @@ from .models import (
     Grade, Attendance, AcademicPeriod, LessonPlan,
     ExtraActivity, ExtraActivityEnrollment, ExtraActivityAttendance,
     TaughtContent, SchoolEvent,
-    StudentChecklistConfig, StudentDailyChecklist
+    StudentChecklistConfig, StudentDailyChecklist, LessonPlanSubmissionBlock
 )
 
 # --- CONFIGURAÇÕES AUXILIARES ---
@@ -124,7 +124,7 @@ class StudentAdmin(admin.ModelAdmin):
             'fields': ('birth_date', 'gender', 'cpf', 'rg', 'nationality')
         }),
         ('Vida Escolar & Rotina', {
-            'fields': ('period', 'is_full_time', 'meals', 'extra_activities')
+            'fields': ('period', 'is_full_time', 'meals'),
         }),
         ('Endereço', {
             'fields': ('zip_code', 'street', 'number', 'complement', 'neighborhood', 'city', 'state')
@@ -186,3 +186,11 @@ class TaughtContentAdmin(admin.ModelAdmin):
 class SchoolEventAdmin(admin.ModelAdmin):
     list_display = ('title', 'start_time', 'event_type', 'target_audience')
     list_filter = ('event_type', 'target_audience')
+
+
+@admin.register(LessonPlanSubmissionBlock)
+class LessonPlanSubmissionBlockAdmin(admin.ModelAdmin):
+    list_display = ('teacher', 'active', 'created_at', 'released_at', 'blocked_by', 'released_by')
+    list_filter = ('active', 'created_at')
+    search_fields = ('teacher__username', 'teacher__first_name', 'teacher__last_name')
+    readonly_fields = ('created_at',)

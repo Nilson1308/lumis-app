@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from apps.core.audit import register_access_audit
 from .models import WeeklyReport, ClassObservation, MeetingMinute, StudentReport
 from .serializers import WeeklyReportSerializer, ClassObservationSerializer, MeetingMinuteSerializer, StudentReportSerializer
 
@@ -37,7 +38,34 @@ class WeeklyReportViewSet(viewsets.ModelViewSet):
             raise ValidationError({'recipient_ids': ['É obrigatório selecionar pelo menos um coordenador para envio.']})
         
         print("DEBUG: Validação passou, salvando...")
-        serializer.save(author=self.request.user)
+        report = serializer.save(author=self.request.user)
+        register_access_audit(
+            request=self.request,
+            action='WEEKLY_REPORT_CREATE',
+            resource_type='weekly_report',
+            resource_id=report.id,
+            details={'start_date': str(report.start_date), 'end_date': str(report.end_date)}
+        )
+
+    def perform_update(self, serializer):
+        report = serializer.save()
+        register_access_audit(
+            request=self.request,
+            action='WEEKLY_REPORT_UPDATE',
+            resource_type='weekly_report',
+            resource_id=report.id,
+            details={'start_date': str(report.start_date), 'end_date': str(report.end_date)}
+        )
+
+    def perform_destroy(self, instance):
+        report_id = instance.id
+        super().perform_destroy(instance)
+        register_access_audit(
+            request=self.request,
+            action='WEEKLY_REPORT_DELETE',
+            resource_type='weekly_report',
+            resource_id=report_id
+        )
 
 class ClassObservationViewSet(viewsets.ModelViewSet):
     queryset = ClassObservation.objects.all().order_by('-date')
@@ -50,15 +78,39 @@ class ClassObservationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         instance = serializer.save(coordinator=self.request.user)
+        register_access_audit(
+            request=self.request,
+            action='CLASS_OBSERVATION_CREATE',
+            resource_type='class_observation',
+            resource_id=instance.id,
+            details={'assignment_id': instance.assignment_id, 'feedback_given': instance.feedback_given}
+        )
         
         if instance.feedback_given:
             self.notify_teacher(instance)
 
     def perform_update(self, serializer):
         instance = serializer.save()
+        register_access_audit(
+            request=self.request,
+            action='CLASS_OBSERVATION_UPDATE',
+            resource_type='class_observation',
+            resource_id=instance.id,
+            details={'assignment_id': instance.assignment_id, 'feedback_given': instance.feedback_given}
+        )
         
         if instance.feedback_given:
             self.notify_teacher(instance)
+
+    def perform_destroy(self, instance):
+        obs_id = instance.id
+        super().perform_destroy(instance)
+        register_access_audit(
+            request=self.request,
+            action='CLASS_OBSERVATION_DELETE',
+            resource_type='class_observation',
+            resource_id=obs_id
+        )
 
     def notify_teacher(self, observation):
         """
@@ -99,7 +151,34 @@ class MeetingMinuteViewSet(viewsets.ModelViewSet):
     search_fields = ['title', 'content'] # Busca textual no conteúdo da ata
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        minute = serializer.save(created_by=self.request.user)
+        register_access_audit(
+            request=self.request,
+            action='MEETING_MINUTE_CREATE',
+            resource_type='meeting_minute',
+            resource_id=minute.id,
+            details={'date': str(minute.date), 'title': minute.title}
+        )
+
+    def perform_update(self, serializer):
+        minute = serializer.save()
+        register_access_audit(
+            request=self.request,
+            action='MEETING_MINUTE_UPDATE',
+            resource_type='meeting_minute',
+            resource_id=minute.id,
+            details={'date': str(minute.date), 'title': minute.title}
+        )
+
+    def perform_destroy(self, instance):
+        minute_id = instance.id
+        super().perform_destroy(instance)
+        register_access_audit(
+            request=self.request,
+            action='MEETING_MINUTE_DELETE',
+            resource_type='meeting_minute',
+            resource_id=minute_id
+        )
 
 class StudentReportViewSet(viewsets.ModelViewSet):
     queryset = StudentReport.objects.all().order_by('-date')
@@ -126,13 +205,25 @@ class StudentReportViewSet(viewsets.ModelViewSet):
         # Permite ?student=5 na URL
         student_id = self.request.query_params.get('student')
         if student_id:
+            try:
+                student_id = int(student_id)
+            except (TypeError, ValueError):
+                return queryset.none()
             queryset = queryset.filter(student_id=student_id)
             
         return queryset
 
     def perform_create(self, serializer):
         # SEGURANÇA: Ao criar, força PENDING e associa o professor logado
-        serializer.save(teacher=self.request.user, status='PENDING', visible_to_family=False)
+        report = serializer.save(teacher=self.request.user, status='PENDING', visible_to_family=False)
+        register_access_audit(
+            request=self.request,
+            action='STUDENT_REPORT_CREATE',
+            resource_type='student_report',
+            resource_id=report.id,
+            student_id=report.student_id,
+            details={'status': report.status}
+        )
 
     def perform_update(self, serializer):
         user = self.request.user
@@ -142,8 +233,52 @@ class StudentReportViewSet(viewsets.ModelViewSet):
         
         if is_coordination:
             # Coordenação pode alterar tudo (Status, Visibilidade, Comentário)
-            serializer.save()
+            previous_status = serializer.instance.status if serializer.instance else None
+            report = serializer.save()
+            if previous_status != report.status:
+                register_access_audit(
+                    request=self.request,
+                    action='STUDENT_REPORT_STATUS_CHANGE',
+                    resource_type='student_report',
+                    resource_id=report.id,
+                    student_id=report.student_id,
+                    details={'previous_status': previous_status, 'new_status': report.status}
+                )
         else:
             # Professor: Se editar o texto, o status volta (ou mantém) como PENDING e esconde da família
             # Isso impede que o professor edite um relatório Aprovado e mude o conteúdo sem nova revisão
-            serializer.save(status='PENDING', visible_to_family=False)
+            report = serializer.save(status='PENDING', visible_to_family=False)
+            register_access_audit(
+                request=self.request,
+                action='STUDENT_REPORT_EDIT_BY_TEACHER',
+                resource_type='student_report',
+                resource_id=report.id,
+                student_id=report.student_id,
+                details={'status_forced': 'PENDING'}
+            )
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        if hasattr(request.user, 'guardian_profile'):
+            register_access_audit(
+                request=request,
+                action='PARENT_STUDENT_REPORT_LIST_VIEW',
+                resource_type='student_report_list',
+                resource_id=request.query_params.get('student', ''),
+                student_id=request.query_params.get('student'),
+                details={'query_student': request.query_params.get('student')}
+            )
+        return response
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        if hasattr(request.user, 'guardian_profile'):
+            report = self.get_object()
+            register_access_audit(
+                request=request,
+                action='PARENT_STUDENT_REPORT_DETAIL_VIEW',
+                resource_type='student_report',
+                resource_id=report.id,
+                student_id=report.student_id
+            )
+        return response

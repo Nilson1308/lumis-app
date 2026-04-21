@@ -16,6 +16,9 @@ const loading = ref(true);
 const showProfileDialog = ref(false);
 const showStudentDialog = ref(false);
 const editingStudent = ref({});
+const medicalReportFile = ref(null);
+const prescriptionFile = ref(null);
+const savingStudent = ref(false);
 
 // --- CARREGAMENTO ---
 const loadDashboard = async () => {
@@ -28,7 +31,10 @@ const loadDashboard = async () => {
 
         // 2. Busca Perfil do Pai (Para o Header e Edição)
         const resProfile = await api.get('guardians/me/');
-        guardianProfile.value = resProfile.data;
+        guardianProfile.value = {
+            ...resProfile.data,
+            secondary_phone: resProfile.data.secondary_phone || ''
+        };
 
     } catch (e) {
         console.error("Erro ao carregar dados", e);
@@ -40,6 +46,10 @@ const loadDashboard = async () => {
 // --- AÇÕES DE NAVEGAÇÃO ---
 const openReportCard = (studentId) => router.push({ name: 'parent-report-card', params: { id: studentId } });
 const openAttendance = (studentId) => router.push({ name: 'parent-attendance', params: { id: studentId } });
+const openClassDiary = (studentId) => router.push({ name: 'parent-class-diary', params: { id: studentId } });
+const openSchoolCalendar = () => router.push({ name: 'parent-calendar' });
+const openClassSchedule = (studentId) => router.push({ name: 'parent-class-schedule', params: { id: studentId } });
+const openWeeklySummary = (studentId) => router.push({ name: 'parent-student-summary', params: { id: studentId } });
 
 // --- LÓGICA DE EDIÇÃO: PERFIL ---
 const openProfileEdit = () => {
@@ -74,17 +84,68 @@ const searchCep = async () => {
 // --- LÓGICA DE EDIÇÃO: ALUNO ---
 const openStudentEdit = (child) => {
     editingStudent.value = { ...child }; // Clona para não editar em tempo real
+    medicalReportFile.value = null;
+    prescriptionFile.value = null;
     showStudentDialog.value = true;
 };
 
+const openUploadedFile = (url) => {
+    if (!url) return;
+    if (String(url).startsWith('http')) window.open(url, '_blank');
+    else window.open(`${window.location.origin}${url}`, '_blank');
+};
+
+const onMedicalReportSelect = (event) => {
+    medicalReportFile.value = event.files?.[0] || null;
+};
+
+const onPrescriptionSelect = (event) => {
+    prescriptionFile.value = event.files?.[0] || null;
+};
+
 const saveStudent = async () => {
+    savingStudent.value = true;
     try {
-        await api.patch(`students/${editingStudent.value.id}/`, editingStudent.value);
-        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Dados de saúde atualizados!', life: 3000 });
+        const id = editingStudent.value.id;
+        const hasNewFiles = !!(medicalReportFile.value || prescriptionFile.value);
+
+        if (hasNewFiles) {
+            const formData = new FormData();
+            const textFields = [
+                'emergency_contact',
+                'allergies',
+                'medications',
+                'zip_code',
+                'street',
+                'number',
+                'complement',
+                'neighborhood',
+                'city',
+                'state'
+            ];
+            textFields.forEach((key) => {
+                const v = editingStudent.value[key];
+                formData.append(key, v != null && v !== undefined ? String(v) : '');
+            });
+            if (medicalReportFile.value) formData.append('medical_report', medicalReportFile.value);
+            if (prescriptionFile.value) formData.append('prescription', prescriptionFile.value);
+
+            await api.patch(`students/${id}/`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+        } else {
+            await api.patch(`students/${id}/`, editingStudent.value);
+        }
+
+        toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Dados atualizados!', life: 3000 });
         showStudentDialog.value = false;
-        loadDashboard(); // Recarrega para atualizar a tela
+        medicalReportFile.value = null;
+        prescriptionFile.value = null;
+        loadDashboard();
     } catch (e) {
         toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao atualizar dados do aluno.' });
+    } finally {
+        savingStudent.value = false;
     }
 };
 
@@ -131,35 +192,73 @@ onMounted(() => {
             </div>
         </div>
 
-        <div class="col-span-12 xl:col-span-4" v-for="child in children" :key="child.id">
-            <div class="card card-w-title cursor-pointer hover:surface-100 transition-duration-200 h-full flex flex-col justify-between">
-                <div>
-                    <div class="flex align-center mb-3">
-                        <Avatar :label="child.name.charAt(0)" size="large" shape="circle" class="mr-3 bg-indigo-500 text-white font-bold" />
-                        <div>
-                            <div class="text-xl font-bold">{{ child.name }}</div>
-                            <span class="text-gray-500">{{ child.classroom_name || 'Sem Turma' }}</span>
+        <div class="col-span-12 md:col-span-6 xl:col-span-6" v-for="child in children" :key="child.id">
+            <div class="card card-w-title h-full flex flex-col surface-card border-1 surface-border">
+                <div class="flex align-items-start justify-content-between gap-3 mb-3">
+                    <div class="flex align-items-center">
+                        <Avatar :label="child.name.charAt(0)" size="large" shape="circle" class="mr-3 bg-indigo-500 text-white font-bold flex-shrink-0" />
+                        <div class="min-w-0">
+                            <div class="text-xl font-bold text-900 line-height-3">{{ child.name }}</div>
+                            <span class="text-600 text-sm">{{ child.classroom_name || 'Sem Turma' }}</span>
                         </div>
                     </div>
-                    <Divider />
+                    <Button
+                        icon="pi pi-pencil"
+                        class="p-button-rounded p-button-text flex-shrink-0"
+                        @click.stop="openStudentEdit(child)"
+                        v-tooltip.left="'Dados do aluno, saúde e documentos'"
+                    />
                 </div>
-                
-                <div class="mt-3 flex gap-2 justify-between">
-                    <div class="flex gap-2">
-                        <Button label="Boletim" icon="pi pi-file" class="p-button-sm p-button-outlined" @click="openReportCard(child.id)" />
-                        <Button label="Faltas" icon="pi pi-calendar" class="p-button-sm p-button-outlined p-button-warning" @click="openAttendance(child.id)" />
-                        <Button 
-                            icon="pi pi-book" 
-                            label="Relatórios" 
-                            class="p-button-sm p-button-outlined flex-1" 
-                            @click="router.push({ name: 'parent-reports', params: { id: child.id } })" 
+
+                <Divider class="my-0" />
+
+                <div class="mt-3">
+                    <div class="text-500 text-xs font-semibold uppercase mb-2">Rotina e acompanhamento</div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <Button
+                            label="Resumo da semana"
+                            icon="pi pi-chart-line"
+                            class="col-span-2 w-full p-button-sm justify-content-center"
+                            @click.stop="openWeeklySummary(child.id)"
+                        />
+                        <Button
+                            label="Diário de classe"
+                            icon="pi pi-bookmark"
+                            class="w-full p-button-outlined p-button-info justify-content-center"
+                            @click.stop="openClassDiary(child.id)"
+                        />
+                        <Button
+                            label="Grade horária"
+                            icon="pi pi-clock"
+                            class="w-full p-button-outlined p-button-success justify-content-center"
+                            @click.stop="openClassSchedule(child.id)"
+                            v-tooltip.bottom="'Horários da turma do seu educando'"
+                        />
+                        <Button
+                            label="Frequência"
+                            icon="pi pi-calendar-times"
+                            class="w-full p-button-outlined p-button-warning justify-content-center"
+                            @click.stop="openAttendance(child.id)"
+                        />
+                        <Button
+                            label="Boletim"
+                            icon="pi pi-file-pdf"
+                            class="w-full p-button-outlined justify-content-center"
+                            @click.stop="openReportCard(child.id)"
+                        />
+                        <Button
+                            label="Relatórios"
+                            icon="pi pi-file-edit"
+                            class="w-full p-button-outlined justify-content-center"
+                            @click.stop="router.push({ name: 'parent-reports', params: { id: child.id } })"
                         />
                     </div>
-                    <Button 
-                        icon="pi pi-pencil" 
-                        class="p-button-sm p-button-text" 
-                        @click="openStudentEdit(child)" 
-                        v-tooltip.top="'Atualizar Dados de Saúde/Emergência'"
+                    <Button
+                        label="Calendário da escola"
+                        icon="pi pi-calendar"
+                        class="w-full mt-2 p-button-outlined p-button-secondary justify-content-center"
+                        @click.stop="openSchoolCalendar()"
+                        v-tooltip.bottom="'Provas, eventos e avisos no calendário (em evolução por turma)'"
                     />
                 </div>
             </div>
@@ -171,18 +270,19 @@ onMounted(() => {
             </div>
         </div>
 
-        <Dialog v-model:visible="showProfileDialog" header="Meus Dados de Contato" :modal="true" :style="{ width: '450px' }" class="p-fluid">
+        <Dialog v-model:visible="showProfileDialog" header="Meus Dados de Contato" :modal="true" :style="{ width: '480px' }" class="p-fluid">
             <div class="mb-4">
-                <label class="font-bold mb-2 block">Email</label>
-                <InputText v-model="guardianProfile.email" fluid />
+                <label class="font-bold mb-2 block">E-mail</label>
+                <InputText v-model="guardianProfile.email" type="email" placeholder="exemplo@email.com" fluid />
             </div>
             <div class="mb-4">
                 <label class="font-bold mb-2 block">Celular / WhatsApp</label>
                 <InputMask v-model="guardianProfile.phone" mask="(99) 99999-9999" fluid />
             </div>
             <div class="mb-4">
-                <label class="font-bold mb-2 block">Email</label>
-                <InputText v-model="guardianProfile.email" placeholder="exemplo@email.com" fluid />
+                <label class="font-bold mb-2 block">Telefone secundário / recado</label>
+                <InputMask v-model="guardianProfile.secondary_phone" mask="(99) 99999-9999" fluid />
+                <small class="text-600">Opcional — outro número para contato da escola.</small>
             </div>
             <template #footer>
                 <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="showProfileDialog = false" />
@@ -240,9 +340,56 @@ onMounted(() => {
                 </div>
             </div>
 
+            <Divider />
+            <div class="text-900 font-semibold mb-3">Documentos médicos</div>
+            <div class="grid grid-cols-12 gap-4">
+                <div class="col-span-12 md:col-span-6">
+                    <label class="font-bold block mb-2">Laudo médico</label>
+                    <div v-if="editingStudent.medical_report" class="mb-2">
+                        <Button
+                            label="Ver arquivo atual"
+                            icon="pi pi-external-link"
+                            class="p-button-text p-button-sm p-0"
+                            @click="openUploadedFile(editingStudent.medical_report)"
+                        />
+                    </div>
+                    <FileUpload
+                        mode="basic"
+                        name="medical_report"
+                        accept="application/pdf,image/*"
+                        :maxFileSize="8000000"
+                        chooseLabel="Enviar ou trocar laudo"
+                        @select="onMedicalReportSelect"
+                        class="w-full"
+                    />
+                    <small class="text-600">PDF ou imagem, até 8 MB.</small>
+                </div>
+                <div class="col-span-12 md:col-span-6">
+                    <label class="font-bold block mb-2">Receita médica</label>
+                    <div v-if="editingStudent.prescription" class="mb-2">
+                        <Button
+                            label="Ver arquivo atual"
+                            icon="pi pi-external-link"
+                            class="p-button-text p-button-sm p-0"
+                            @click="openUploadedFile(editingStudent.prescription)"
+                        />
+                    </div>
+                    <FileUpload
+                        mode="basic"
+                        name="prescription"
+                        accept="application/pdf,image/*"
+                        :maxFileSize="8000000"
+                        chooseLabel="Enviar ou trocar receita"
+                        @select="onPrescriptionSelect"
+                        class="w-full"
+                    />
+                    <small class="text-600">PDF ou imagem, até 8 MB.</small>
+                </div>
+            </div>
+
             <template #footer>
                 <Button label="Cancelar" icon="pi pi-times" class="p-button-text" @click="showStudentDialog = false" />
-                <Button label="Salvar" icon="pi pi-check" @click="saveStudent" />
+                <Button label="Salvar" icon="pi pi-check" @click="saveStudent" :loading="savingStudent" />
             </template>
         </Dialog>
     </div>
