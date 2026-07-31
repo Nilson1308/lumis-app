@@ -15,7 +15,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         # Garanta que 'groups' está na lista, além dos campos padrão
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'groups', 'is_superuser']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'groups', 'is_superuser', 'must_change_password']
 
 class SchoolAccountSerializer(serializers.ModelSerializer):
     def validate_non_teaching_event_types(self, value):

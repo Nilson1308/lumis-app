@@ -10,6 +10,7 @@ export const useAuthStore = defineStore('auth', {
 
     getters: {
         isAuthenticated: (state) => !!state.token,
+        mustChangePassword: (state) => !!state.user?.must_change_password,
 
         // Superusuário tem acesso total
         isAdmin: (state) => state.user?.is_superuser,
@@ -45,6 +46,38 @@ export const useAuthStore = defineStore('auth', {
                 'Diretoria'
             ];
             return power.some((name) => g.includes(name));
+        },
+
+        /** Gestão de documentos compartilhados (coordenação, secretaria, direção, admin). */
+        canManageSharedDocuments: (state) => {
+            if (state.user?.is_superuser) return true;
+            const g = state.user?.groups;
+            if (!g) return false;
+            const power = [
+                'Secretaria',
+                'Coordenadores',
+                'Coordenação',
+                'Coordenacao',
+                'Direção',
+                'Direcao',
+                'Diretoria'
+            ];
+            return power.some((name) => g.includes(name));
+        },
+
+        /** Leitura de documentos compartilhados (professores, responsáveis e gestão). */
+        canBrowseSharedDocuments: (state) => {
+            if (state.user?.is_superuser) return true;
+            const g = state.user?.groups;
+            if (!g) return false;
+            return (
+                g.includes('Professores') ||
+                g.includes('Responsáveis') ||
+                g.includes('Responsaveis') ||
+                g.includes('Pais') ||
+                ['Secretaria', 'Coordenadores', 'Coordenação', 'Coordenacao', 'Direção', 'Direcao', 'Diretoria']
+                    .some((name) => g.includes(name))
+            );
         },
 
         isTeacher: (state) => {

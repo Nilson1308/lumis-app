@@ -13,6 +13,7 @@ except OSError:
     CSS = None
 
 from .models import Enrollment, Grade, Attendance, Subject, AcademicPeriod, TeacherAssignment, TaughtContent, ClassRoom
+from .report_filters import resolve_classroom_report_window, resolve_student_card_date_window
 from datetime import datetime
 
 
@@ -69,6 +70,10 @@ def generate_student_report_card(request, enrollment_id):
         except AcademicPeriod.DoesNotExist:
             pass
 
+    card_start, card_end, date_error = resolve_student_card_date_window(request, selected_period)
+    if date_error is not None:
+        return date_error
+
     student = enrollment.student
     classroom = enrollment.classroom
     # Apenas matérias do corpo docente da turma (TeacherAssignment)
@@ -100,6 +105,13 @@ def generate_student_report_card(request, enrollment_id):
         
         for period in all_periods:
             grades = Grade.objects.filter(enrollment=enrollment, subject=subject, period=period)
+            absences_qs = Attendance.objects.filter(
+                enrollment=enrollment, subject=subject, period=period, present=False
+            )
+
+            if selected_period and card_start and card_end and period.id == selected_period.id:
+                grades = grades.filter(date__gte=card_start, date__lte=card_end)
+                absences_qs = absences_qs.filter(date__gte=card_start, date__lte=card_end)
             
             # Média do Período (Ponderada)
             p_weighted = 0
@@ -118,9 +130,7 @@ def generate_student_report_card(request, enrollment_id):
             else:
                 row['period_grades'].append("-")
 
-            # Somar Faltas
-            absences = Attendance.objects.filter(enrollment=enrollment, subject=subject, period=period, present=False).count()
-            row['total_absences'] += absences
+            row['total_absences'] += absences_qs.count()
 
         # Cálculo da Média Final (Média Aritmética dos Bimestres)
         if count_of_periods_with_grades > 0:
@@ -174,31 +184,28 @@ def _can_access_classroom(user, classroom_id):
 def generate_diary_report(request):
     """
     Diário de classe em PDF.
-    GET: classroom, period. Professor: só suas turmas. Coordenador: escolhe turma.
+    GET: classroom, period, start_date (opc.), end_date (opc.).
     """
-    from rest_framework.permissions import IsAuthenticated
     if not request.user.is_authenticated:
         return HttpResponse("Acesso negado.", status=403)
 
-    classroom_id = request.GET.get('classroom')
-    period_id = request.GET.get('period')
-    if not classroom_id or not period_id:
-        return HttpResponse("Parâmetros classroom e period são obrigatórios.", status=400)
+    window, error = resolve_classroom_report_window(request)
+    if error is not None:
+        return error
 
-    try:
-        classroom = ClassRoom.objects.get(pk=classroom_id)
-        period = AcademicPeriod.objects.get(pk=period_id)
-    except (ClassRoom.DoesNotExist, AcademicPeriod.DoesNotExist):
-        return HttpResponse("Turma ou período não encontrado.", status=404)
+    classroom = window['classroom']
+    period = window['period']
+    date_start = window['date_start']
+    date_end = window['date_end']
+    range_label = window['range_label']
 
-    if not _can_access_classroom(request.user, classroom_id):
+    if not _can_access_classroom(request.user, classroom.id):
         return HttpResponse("Sem permissão para acessar esta turma.", status=403)
 
-    # TaughtContent: atribuições desta turma, datas no período
     contents = TaughtContent.objects.filter(
         assignment__classroom=classroom,
-        date__gte=period.start_date,
-        date__lte=period.end_date
+        date__gte=date_start,
+        date__lte=date_end,
     ).select_related('assignment', 'assignment__subject', 'assignment__teacher').order_by('date', 'assignment__subject__name')
 
     rows = []
@@ -216,6 +223,7 @@ def generate_diary_report(request):
         'classroom': classroom,
         'period': period,
         'rows': rows,
+        'range_label': range_label,
         'generated_at': datetime.now().strftime('%d/%m/%Y %H:%M'),
         'logo_url': logo_url,
         'school_name': school_name,
@@ -238,23 +246,22 @@ def generate_diary_report(request):
 def generate_attendance_report(request):
     """
     Relatório de Frequências em PDF.
-    GET: classroom, period. Professor: só suas turmas. Coordenador: escolhe turma.
+    GET: classroom, period, start_date (opc.), end_date (opc.).
     """
     if not request.user.is_authenticated:
         return HttpResponse("Acesso negado.", status=403)
 
-    classroom_id = request.GET.get('classroom')
-    period_id = request.GET.get('period')
-    if not classroom_id or not period_id:
-        return HttpResponse("Parâmetros classroom e period são obrigatórios.", status=400)
+    window, error = resolve_classroom_report_window(request)
+    if error is not None:
+        return error
 
-    try:
-        classroom = ClassRoom.objects.get(pk=classroom_id)
-        period = AcademicPeriod.objects.get(pk=period_id)
-    except (ClassRoom.DoesNotExist, AcademicPeriod.DoesNotExist):
-        return HttpResponse("Turma ou período não encontrado.", status=404)
+    classroom = window['classroom']
+    period = window['period']
+    date_start = window['date_start']
+    date_end = window['date_end']
+    range_label = window['range_label']
 
-    if not _can_access_classroom(request.user, classroom_id):
+    if not _can_access_classroom(request.user, classroom.id):
         return HttpResponse("Sem permissão para acessar esta turma.", status=403)
 
     # Enrollments ativos da turma
@@ -271,12 +278,15 @@ def generate_attendance_report(request):
     for enroll in enrollments:
         row = {'student_name': enroll.student.name, 'registration': enroll.student.registration_number, 'subjects': []}
         for subj in subjects:
-            presences = Attendance.objects.filter(
-                enrollment=enroll, subject=subj, period=period, present=True
-            ).count()
-            absences = Attendance.objects.filter(
-                enrollment=enroll, subject=subj, period=period, present=False
-            ).count()
+            att_base = Attendance.objects.filter(
+                enrollment=enroll,
+                subject=subj,
+                period=period,
+                date__gte=date_start,
+                date__lte=date_end,
+            )
+            presences = att_base.filter(present=True).count()
+            absences = att_base.filter(present=False).count()
             row['subjects'].append({
                 'subject': subj.name,
                 'presences': presences,
@@ -290,6 +300,7 @@ def generate_attendance_report(request):
         'period': period,
         'rows': rows,
         'subjects': subjects,
+        'range_label': range_label,
         'generated_at': datetime.now().strftime('%d/%m/%Y %H:%M'),
         'logo_url': logo_url,
         'school_name': school_name,

@@ -17,6 +17,13 @@ api.interceptors.request.use(
             // O Django espera: "Bearer <token>"
             config.headers.Authorization = `Bearer ${token}`;
         }
+        // FormData: o browser define multipart/form-data com boundary (não usar application/json)
+        if (config.data instanceof FormData) {
+            if (config.headers) {
+                delete config.headers['Content-Type'];
+                delete config.headers['content-type'];
+            }
+        }
         return config;
     },
     (error) => {

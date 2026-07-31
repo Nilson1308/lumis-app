@@ -15,6 +15,7 @@ from apps.academic.models import (
     ClassRoom,
     ClassSchedule,
     Enrollment,
+    Grade,
     Guardian,
     Segment,
     Student,
@@ -261,6 +262,51 @@ class ClassScheduleAccessTests(APITestCase):
         self.assertEqual(len(results), 0)
 
 
+class GradeAssessmentNamesTests(APITestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(username='grade_teacher', password='pass12345')
+        prof_group, _ = Group.objects.get_or_create(name='Professores')
+        self.teacher.groups.add(prof_group)
+
+        segment = Segment.objects.create(name='Fundamental I')
+        self.classroom = ClassRoom.objects.create(name='5B', year=2026, segment=segment)
+        self.subject = Subject.objects.create(name='Matemática')
+        self.student = Student.objects.create(name='Aluno Mat', registration_number='MAT001')
+        self.enrollment = Enrollment.objects.create(student=self.student, classroom=self.classroom, active=True)
+        self.period = AcademicPeriod.objects.create(
+            name='1º Bimestre',
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 4, 30),
+            is_active=True,
+        )
+
+        base = dict(
+            enrollment=self.enrollment,
+            subject=self.subject,
+            period=self.period,
+            value=8,
+            weight=1,
+        )
+        Grade.objects.create(name='Prova 1', **base)
+        Grade.objects.create(name='prova 1', **base)
+        Grade.objects.create(name='Trabalho Bimestral', **base)
+
+    def test_assessment_names_dedupes_case_insensitive(self):
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.get('/api/grades/assessment-names/')
+        self.assertEqual(response.status_code, 200)
+        names = response.data['names']
+        self.assertEqual(len(names), 2)
+        self.assertIn('Prova 1', names)
+        self.assertIn('Trabalho Bimestral', names)
+
+    def test_assessment_names_filters_by_query(self):
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.get('/api/grades/assessment-names/', {'q': 'trab'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['names'], ['Trabalho Bimestral'])
+
+
 class AttendanceScheduleRulesTests(APITestCase):
     def setUp(self):
         self.teacher = User.objects.create_user(username='att_teacher', password='pass12345')
@@ -278,11 +324,11 @@ class AttendanceScheduleRulesTests(APITestCase):
         self.student = Student.objects.create(name='Aluno Inglês', registration_number='ING001')
         self.enrollment = Enrollment.objects.create(student=self.student, classroom=self.classroom, active=True)
 
-        # Terça-feira
+        # Terça-feira (padrão JS/FullCalendar: 2)
         ClassSchedule.objects.create(
             classroom=self.classroom,
             assignment=self.assignment,
-            day_of_week=1,
+            day_of_week=2,
             start_time=time(7, 0),
             end_time=time(7, 50),
         )
@@ -417,6 +463,61 @@ class AttendanceScheduleRulesTests(APITestCase):
         ).count()
         self.assertEqual(first_count, second_count)
 
+    def test_teacher_can_reset_attendance_day(self):
+        self.client.force_authenticate(user=self.teacher)
+        save_resp = self.client.post(
+            '/api/attendance/bulk_save/',
+            {
+                'assignment': self.assignment.id,
+                'classroom': self.classroom.id,
+                'subject': self.subject.id,
+                'date': '2026-03-10',
+                'records': [
+                    {'enrollment_id': self.enrollment.id, 'present': True},
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(save_resp.status_code, 200)
+
+        reset_resp = self.client.post(
+            '/api/attendance/reset-day/',
+            {
+                'assignment': self.assignment.id,
+                'classroom': self.classroom.id,
+                'subject': self.subject.id,
+                'date': '2026-03-10',
+            },
+            format='json',
+        )
+        self.assertEqual(reset_resp.status_code, 200)
+        self.assertEqual(
+            Attendance.objects.filter(
+                enrollment=self.enrollment,
+                subject=self.subject,
+                date=date(2026, 3, 10),
+            ).count(),
+            0,
+        )
+
+    def test_teacher_cannot_save_attendance_on_weekend(self):
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(
+            '/api/attendance/bulk_save/',
+            {
+                'assignment': self.assignment.id,
+                'classroom': self.classroom.id,
+                'subject': self.subject.id,
+                'date': '2026-03-14',  # Sábado
+                'records': [
+                    {'enrollment_id': self.enrollment.id, 'present': True},
+                ],
+            },
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('sábado', str(response.data).lower())
+
     def test_teacher_cannot_read_daily_log_from_other_teacher_classroom(self):
         other_teacher = User.objects.create_user(username='att_other', password='pass12345')
         prof_group, _ = Group.objects.get_or_create(name='Professores')
@@ -429,7 +530,7 @@ class AttendanceScheduleRulesTests(APITestCase):
         ClassSchedule.objects.create(
             classroom=self.classroom,
             assignment=other_assignment,
-            day_of_week=2,
+            day_of_week=3,
             start_time=time(9, 0),
             end_time=time(9, 50),
         )

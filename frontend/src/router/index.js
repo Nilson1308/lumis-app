@@ -42,6 +42,12 @@ const router = createRouter({
                     component: () => import('@/views/pages/CalendarView.vue'),
                     meta: { breadcrumb: 'Calendário' }
                 },
+                {
+                    path: '/first-access/password',
+                    name: 'force-change-password',
+                    component: () => import('@/views/pages/auth/ForceChangePassword.vue'),
+                    meta: { requiresAuth: true }
+                },
 
                 // --- PORTAL DA FAMÍLIA ---
                 {
@@ -210,6 +216,12 @@ const router = createRouter({
                     component: () => import('@/views/pages/ReportsPage.vue'),
                     meta: { breadcrumb: 'Relatórios PDF' }
                 },
+                {
+                    path: '/suporte',
+                    name: 'support-tickets',
+                    component: () => import('@/views/pages/support/SupportTickets.vue'),
+                    meta: { breadcrumb: 'Suporte' }
+                },
 
                 // --- COORDENAÇÃO ---
                 {
@@ -251,6 +263,31 @@ const router = createRouter({
                     path: '/coordination/auditoria',
                     name: 'coordination-audit-logs',
                     component: () => import('@/views/pages/coordination/AuditLogs.vue')
+                },
+                // --- DOCUMENTOS COMPARTILHADOS ---
+                {
+                    path: '/documentos',
+                    name: 'shared-documents-manage',
+                    component: () => import('@/views/pages/documents/SharedDocumentsManage.vue'),
+                    meta: { breadcrumb: 'Documentos', requiresDocumentManager: true }
+                },
+                {
+                    path: '/documentos/biblioteca',
+                    name: 'shared-documents-browse',
+                    component: () => import('@/views/pages/documents/SharedDocumentsBrowse.vue'),
+                    meta: { breadcrumb: 'Documentos da escola', requiresDocumentBrowser: true }
+                },
+                {
+                    path: '/portal/documentos',
+                    name: 'parent-documents',
+                    component: () => import('@/views/pages/documents/SharedDocumentsBrowse.vue'),
+                    meta: { breadcrumb: 'Documentos da escola', requiresDocumentBrowser: true }
+                },
+                {
+                    path: '/teacher/documentos',
+                    name: 'teacher-documents',
+                    component: () => import('@/views/pages/documents/SharedDocumentsBrowse.vue'),
+                    meta: { breadcrumb: 'Documentos da escola', requiresDocumentBrowser: true }
                 },
                 // --- COMUNICAÇÃO ---
                 {
@@ -305,11 +342,21 @@ router.beforeEach(async (to, from, next) => {
     }
 
     // 2. Verifica permissão
+    const mustChangePassword = !!authStore.user?.must_change_password;
+
     if (requiresAuth && !authStore.isAuthenticated) {
         next({ name: 'login' });
+    } else if (authStore.isAuthenticated && mustChangePassword && to.name !== 'force-change-password') {
+        next({ name: 'force-change-password' });
+    } else if (authStore.isAuthenticated && !mustChangePassword && to.name === 'force-change-password') {
+        next({ name: 'dashboard' });
     } else if (to.name === 'login' && authStore.isAuthenticated) {
         next({ name: 'dashboard' });
     } else if (to.matched.some((r) => r.meta.requiresScheduleEditor) && !authStore.canEditClassSchedule) {
+        next({ name: 'accessDenied' });
+    } else if (to.matched.some((r) => r.meta.requiresDocumentManager) && !authStore.canManageSharedDocuments) {
+        next({ name: 'accessDenied' });
+    } else if (to.matched.some((r) => r.meta.requiresDocumentBrowser) && !authStore.canBrowseSharedDocuments) {
         next({ name: 'accessDenied' });
     } else {
         next();

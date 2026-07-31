@@ -7,6 +7,11 @@ import { useAuthStore } from '@/stores/auth';
 import StudentViewDialog from '@/components/StudentViewDialog.vue';
 import ClassroomSchedule from '@/components/ClassroomSchedule.vue';
 import ClassroomGradesOverviewDialog from '@/components/ClassroomGradesOverviewDialog.vue';
+import {
+    buildReportParamsFromFilters,
+    validateReportFiltersState,
+    extractPdfError,
+} from '@/composables/useReportPdfFilters';
 
 const authStore = useAuthStore();
 
@@ -37,6 +42,7 @@ const periods = ref([]);
 const assignments = ref([]);
 const classroomEnrollments = ref([]);
 const selectedPeriod = ref(null);
+const reportDateRange = ref(null);
 const selectedEnrollmentId = ref(null);
 const loadingPdf = ref(false);
 const academicDialogVisible = ref(false);
@@ -110,20 +116,41 @@ const openAcademicDialog = () => {
     academicDialogVisible.value = true;
 };
 
+const syncReportDateRangeFromPeriod = () => {
+    const period = periods.value.find((p) => p.id === selectedPeriod.value);
+    if (period?.start_date && period?.end_date) {
+        const [y1, m1, d1] = period.start_date.split('-').map(Number);
+        const [y2, m2, d2] = period.end_date.split('-').map(Number);
+        reportDateRange.value = [new Date(y1, m1 - 1, d1), new Date(y2, m2 - 1, d2)];
+    }
+};
+
 const openReportsDialog = () => {
+    syncReportDateRangeFromPeriod();
     reportsDialogVisible.value = true;
 };
 
 const openReportPdf = async (type) => {
-    if (!selectedPeriod.value) {
-        toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Selecione o período.', life: 3000 });
+    if (
+        !validateReportFiltersState({
+            toast,
+            classroomId,
+            periodId: selectedPeriod.value,
+            dateRange: reportDateRange.value,
+        })
+    ) {
         return;
     }
     loadingPdf.value = true;
     try {
         const endpoint = type === 'diary' ? 'reports/diary-pdf/' : 'reports/attendance-pdf/';
+        const params = buildReportParamsFromFilters({
+            classroomId,
+            periodId: selectedPeriod.value,
+            dateRange: reportDateRange.value,
+        });
         const { data: blob } = await api.get(endpoint, {
-            params: { classroom: classroomId, period: selectedPeriod.value },
+            params,
             responseType: 'blob'
         });
         const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
@@ -131,7 +158,7 @@ const openReportPdf = async (type) => {
         reportsDialogVisible.value = false;
         setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (e) {
-        toast.add({ severity: 'error', summary: 'Erro', detail: 'Falha ao gerar relatório PDF.', life: 3000 });
+        toast.add({ severity: 'error', summary: 'Erro', detail: extractPdfError(e), life: 4000 });
     } finally {
         loadingPdf.value = false;
     }
@@ -144,11 +171,22 @@ const openStudentReportCardPdf = async () => {
     }
     loadingPdf.value = true;
     try {
-        let endpoint = `reports/student_card/${selectedEnrollmentId.value}/`;
+        const params = {};
         if (selectedPeriod.value) {
-            endpoint += `?period=${selectedPeriod.value}`;
+            params.period = selectedPeriod.value;
+            if (reportDateRange.value?.[0] && reportDateRange.value?.[1]) {
+                const fmt = (d) => {
+                    const x = new Date(d);
+                    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+                };
+                params.start_date = fmt(reportDateRange.value[0]);
+                params.end_date = fmt(reportDateRange.value[1]);
+            }
         }
-        const { data: blob } = await api.get(endpoint, { responseType: 'blob' });
+        const { data: blob } = await api.get(`reports/student_card/${selectedEnrollmentId.value}/`, {
+            params,
+            responseType: 'blob',
+        });
         const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
         window.open(url, '_blank');
         reportsDialogVisible.value = false;
@@ -163,6 +201,9 @@ const openStudentReportCardPdf = async () => {
 watch(selectedPeriod, (newValue) => {
     if (newValue && isCoordinatorAccess.value) {
         localStorage.setItem(periodStorageKey.value, String(newValue));
+    }
+    if (reportsDialogVisible.value) {
+        syncReportDateRangeFromPeriod();
     }
 });
 
@@ -345,7 +386,7 @@ onMounted(() => {
             <Dialog v-model:visible="reportsDialogVisible" header="Relatórios PDF" :modal="true" :style="{ width: '560px' }">
                 <div class="grid grid-cols-12 gap-3">
                     <div class="col-span-12">
-                        <label class="font-bold block mb-2">Período</label>
+                        <label class="font-bold block mb-2">Período letivo</label>
                         <Dropdown
                             v-model="selectedPeriod"
                             :options="periods"
@@ -356,9 +397,21 @@ onMounted(() => {
                             autofocus
                         />
                     </div>
+                    <div class="col-span-12">
+                        <label class="font-bold block mb-2">Intervalo de datas</label>
+                        <DatePicker
+                            v-model="reportDateRange"
+                            selectionMode="range"
+                            dateFormat="dd/mm/yy"
+                            showIcon
+                            fluid
+                            placeholder="De / até"
+                        />
+                        <small class="text-500 block mt-1">Interseção com o período letivo (máx. 366 dias).</small>
+                    </div>
                     <div class="col-span-12 flex flex-wrap gap-2">
-                        <Button label="Diário da Turma (PDF)" icon="pi pi-file-pdf" :loading="loadingPdf" :disabled="!selectedPeriod" @click="openReportPdf('diary')" />
-                        <Button label="Frequências (PDF)" icon="pi pi-file-pdf" severity="secondary" :loading="loadingPdf" :disabled="!selectedPeriod" @click="openReportPdf('attendance')" />
+                        <Button label="Diário da Turma (PDF)" icon="pi pi-file-pdf" :loading="loadingPdf" :disabled="!selectedPeriod || !reportDateRange?.[1]" @click="openReportPdf('diary')" />
+                        <Button label="Frequências (PDF)" icon="pi pi-file-pdf" severity="secondary" :loading="loadingPdf" :disabled="!selectedPeriod || !reportDateRange?.[1]" @click="openReportPdf('attendance')" />
                     </div>
                     <div class="col-span-12 mt-2">
                         <Divider />

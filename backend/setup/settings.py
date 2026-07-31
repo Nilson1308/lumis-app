@@ -68,6 +68,8 @@ INSTALLED_APPS = [
     'apps.academic',
     'apps.coordination',
     'apps.communication',
+    'apps.support',
+    'apps.documents',
 ]
 
 MIDDLEWARE = [

@@ -13,6 +13,8 @@ urlpatterns = [
     path('api/', include('apps.core.urls')),
     path('api/', include('apps.coordination.urls')),
     path('api/', include('apps.communication.urls')),
+    path('api/', include('apps.support.urls')),
+    path('api/', include('apps.documents.urls')),
     
     # Rotas de Autenticação
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # Login

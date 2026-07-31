@@ -76,6 +76,7 @@ watchEffect(() => {
             items: [
                 { label: 'Dashboard', icon: 'pi pi-fw pi-home', to: { name: 'dashboard' } },
                 { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'calendar' } },
+                { label: 'Suporte', icon: 'pi pi-fw pi-headphones', to: { name: 'support-tickets' } },
                 ]
         });
         if (authStore.canEditClassSchedule) {
@@ -98,11 +99,12 @@ watchEffect(() => {
             items: [
                 { label: 'Calendário', icon: 'pi pi-fw pi-calendar', to: { name: 'parent-calendar' } },
                 { label: 'Meus Filhos', icon: 'pi pi-fw pi-users', to: { name: 'parent-dashboard' } },
-                { 
-                    label: 'Meus Dados', 
+                { label: 'Meus Dados', 
                     icon: 'pi pi-fw pi-user-edit', 
                     to: { name: 'parent-dashboard', query: { action: 'profile' } } 
-                }
+                },
+                { label: 'Documentos da escola', icon: 'pi pi-fw pi-folder-open', to: { name: 'parent-documents' } },
+                { label: 'Suporte', icon: 'pi pi-fw pi-headphones', to: { name: 'support-tickets' } },
             ]
         });
     }
@@ -122,6 +124,31 @@ watchEffect(() => {
                 { label: 'Config. Checklist', icon: 'pi pi-fw pi-check-square', to: { name: 'checklist-configs' } },
                 { label: 'Atividades Extras', icon: 'pi pi-fw pi-sun', to: { name: 'extra-activities' } },
                 { label: 'Matrículas em Atividades', icon: 'pi pi-fw pi-user-plus', to: { name: 'extra-activity-enrollments' } }
+            ]
+        });
+    }
+
+    if (authStore.canManageSharedDocuments) {
+        newMenu.push({
+            label: 'Documentos',
+            items: [
+                {
+                    label: 'Gestão de documentos',
+                    icon: 'pi pi-fw pi-folder-open',
+                    to: { name: 'shared-documents-manage' }
+                }
+            ]
+        });
+    }
+    if (authStore.canBrowseSharedDocuments && authStore.isTeacher && !authStore.canManageSharedDocuments) {
+        newMenu.push({
+            label: 'Documentos',
+            items: [
+                {
+                    label: 'Biblioteca de documentos',
+                    icon: 'pi pi-fw pi-folder',
+                    to: { name: 'teacher-documents' }
+                }
             ]
         });
     }

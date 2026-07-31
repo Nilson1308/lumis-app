@@ -66,6 +66,25 @@ docker compose -f docker-compose.prod.yml exec backend python manage.py notify_l
 > Observação: esse comando depende de existir no código da versão em produção.
 > Se retornar `Unknown command`, revise se a management command está presente no backend.
 
+### Sincronizar acessos dos responsáveis (grupo, vínculo, senha e CSV)
+
+Executa as 4 ações em lote:
+- cria/localiza o grupo de responsáveis,
+- cria usuário para responsáveis sem conta,
+- vincula o usuário no registro de responsável,
+- atualiza senha de todos os usuários do grupo,
+- gera CSV com dados de acesso.
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+python manage.py sync_guardian_access \
+  --group-name "Reponsaveis" \
+  --password "123@senha" \
+  --output "/app/media/guardian_access.csv"
+```
+
+> Dica: se preferir outro nome de grupo (ex.: `Responsaveis`), altere `--group-name`.
+
 ### Reconciliar bloqueios de envio de planejamento (forçar checagem)
 
 ```bash

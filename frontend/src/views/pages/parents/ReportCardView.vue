@@ -37,19 +37,9 @@ onMounted(async () => {
             studentClass.value = currentStudent.classroom_name || 'Sem Turma';
         }
 
-        // Processamento das Notas
-        grades.value = gradesResponse.data.map(row => {
-            const n1 = parseGrade(row['1']);
-            const n2 = parseGrade(row['2']);
-            const n3 = parseGrade(row['3']);
-            const n4 = parseGrade(row['4']);
-
-            if (n1 !== null && n2 !== null && n3 !== null && n4 !== null) {
-                const avg = (n1 + n2 + n3 + n4) / 4;
-                row.final = avg.toFixed(1);
-            } else {
-                row.final = '-';
-            }
+        // Processamento das Notas — média anual = média aritmética apenas dos bimestres já lançados
+        grades.value = gradesResponse.data.map((row) => {
+            row.final = computeSubjectAverage(row);
             return row;
         });
 
@@ -62,9 +52,25 @@ onMounted(async () => {
 });
 
 const parseGrade = (value) => {
-    if (!value || value === '-') return null;
-    if (typeof value === 'number') return value;
-    return parseFloat(value.toString().replace(',', '.'));
+    if (value === null || value === undefined || value === '' || value === '-') return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    const n = parseFloat(String(value).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+};
+
+/** Média da disciplina: soma dos bimestres com nota / quantidade (evita exigir os 4 bimestres). */
+const computeSubjectAverage = (row) => {
+    const keys = ['1', '2', '3', '4'];
+    const values = keys.map((k) => parseGrade(row[k])).filter((n) => n !== null);
+    if (values.length === 0) return '-';
+    const sum = values.reduce((a, b) => a + b, 0);
+    return (sum / values.length).toFixed(1);
+};
+
+const isBelowPassing = (finalCell) => {
+    if (finalCell === '-' || finalCell === null || finalCell === undefined) return false;
+    const n = parseFloat(String(finalCell).replace(',', '.'));
+    return Number.isFinite(n) && n < 6;
 };
 
 const goBack = () => router.push({ name: 'parent-dashboard' });
@@ -204,7 +210,7 @@ const generatePDF = () => {
                 <template #body="slotProps">
                     <span v-if="slotProps.data.final !== '-'" 
                           class="px-2 py-1 border-round"
-                          :class="slotProps.data.final < 6 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
+                          :class="isBelowPassing(slotProps.data.final) ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'">
                         {{ slotProps.data.final }}
                     </span>
                     <span v-else>-</span>

@@ -9,12 +9,17 @@ const props = defineProps({
     currentDate: {
         type: Date,
         required: true
+    },
+    disabledWeekdays: {
+        type: Array,
+        default: () => []
     }
 });
 
 const emit = defineEmits(['update:currentDate']);
 
 const displayedDate = ref(new Date(props.currentDate));
+const disabledWeekdaySet = computed(() => new Set(props.disabledWeekdays));
 
 const formatDate = (date) => {
     if (!date) return '';
@@ -63,33 +68,34 @@ const nextWeek = () => {
 };
 
 const goToCurrentWeek = () => {
-    displayedDate.value = new Date();
-    emit('update:currentDate', displayedDate.value);
+    const today = new Date();
+    displayedDate.value = today;
+    emit('update:currentDate', today);
 };
 
-// Atualiza quando a prop currentDate mudar externamente
 watch(() => props.currentDate, (newDate) => {
     displayedDate.value = new Date(newDate);
 });
 
+const isDayDisabled = (date) => disabledWeekdaySet.value.has(date.getDay());
+
 const selectDate = (date) => {
+    if (isDayDisabled(date)) return;
     displayedDate.value = date;
     emit('update:currentDate', date);
 };
 
 const isDateRecorded = (date) => {
     const dateStr = formatDate(date);
-    // Compara strings de data (YYYY-MM-DD)
     return props.attendanceDates.some(d => {
         const dStr = typeof d === 'string' ? d : formatDate(d);
         return dStr === dateStr;
     });
 };
 
-const isToday = (date) => {
-    const today = new Date();
-    return formatDate(date) === formatDate(today);
-};
+const isToday = (date) => formatDate(date) === formatDate(new Date());
+
+const isSelected = (date) => formatDate(date) === formatDate(props.currentDate);
 
 const getDayLabel = (date) => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -124,24 +130,27 @@ const getDayLabel = (date) => {
             </div>
             <div class="flex gap-2 text-xs flex-wrap">
                 <div class="flex items-center gap-1">
-                    <div class="w-2 h-2 md:w-3 md:h-3 rounded-circle bg-green-500"></div>
+                    <div class="w-2 h-2 md:w-3 md:h-3 rounded-circle bg-green-500" />
                     <span class="hidden sm:inline">Realizada</span>
                 </div>
                 <div class="flex items-center gap-1">
-                    <div class="w-2 h-2 md:w-3 md:h-3 rounded-circle bg-gray-400"></div>
+                    <div class="w-2 h-2 md:w-3 md:h-3 rounded-circle bg-gray-400" />
                     <span class="hidden sm:inline">Não realizada</span>
                 </div>
             </div>
         </div>
         <div class="flex gap-1 overflow-x-auto pb-2">
-            <div 
+            <div
                 v-for="(day, index) in getWeekDays" 
                 :key="index"
-                class="flex-1 min-w-[3rem] text-center p-1 md:p-2 border-round cursor-pointer transition-colors"
+                class="flex-1 min-w-[3rem] text-center p-1 md:p-2 border-round transition-colors day-cell"
                 :class="{
-                    'bg-green-100 dark:bg-green-900': isDateRecorded(day),
-                    'bg-gray-100 dark:bg-gray-800': !isDateRecorded(day),
-                    'border-2 border-primary': isToday(day)
+                    'bg-green-100 dark:bg-green-900': isDateRecorded(day) && !isDayDisabled(day),
+                    'bg-gray-100 dark:bg-gray-800': !isDateRecorded(day) && !isDayDisabled(day),
+                    'day-disabled': isDayDisabled(day),
+                    'day-selected': isSelected(day) && !isDayDisabled(day),
+                    'day-today': isToday(day) && !isSelected(day) && !isDayDisabled(day),
+                    'cursor-pointer': !isDayDisabled(day),
                 }"
                 @click="selectDate(day)"
             >
@@ -157,14 +166,31 @@ const getDayLabel = (date) => {
     padding: 0.5rem;
 }
 
-/* Mobile optimizations */
+.day-cell {
+    border: 2px solid transparent;
+}
+
+.day-selected {
+    border-color: var(--p-primary-color, #3b82f6) !important;
+    box-shadow: 0 0 0 1px var(--p-primary-color, #3b82f6);
+}
+
+.day-today {
+    border-color: var(--p-primary-200, #93c5fd);
+}
+
+.day-disabled {
+    opacity: 0.45;
+    cursor: not-allowed !important;
+    background-color: var(--p-surface-100, #f3f4f6) !important;
+}
+
 @media (max-width: 640px) {
     .weekly-calendar {
         padding: 0.25rem;
     }
 }
 
-/* Scrollbar styling for mobile */
 .weekly-calendar .flex.overflow-x-auto {
     scrollbar-width: thin;
     scrollbar-color: #cbd5e1 transparent;

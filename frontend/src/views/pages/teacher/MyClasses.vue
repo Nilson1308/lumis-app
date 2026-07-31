@@ -37,10 +37,12 @@ const openClassroom = (assignment) => {
     });
 };
 
-const openAttendance = (assignment) => {
-    router.push({ 
-        name: 'class-attendance', 
-        params: { id: assignment.id } 
+const openAttendance = (assignment, pendingDate = null) => {
+    const query = pendingDate ? { date: pendingDate } : {};
+    router.push({
+        name: 'class-attendance',
+        params: { id: assignment.id },
+        query,
     });
 };
 
@@ -163,14 +165,28 @@ onMounted(() => {
                                 label="Chamada" 
                                 icon="pi pi-calendar-plus" 
                                 class="p-button-outlined p-button-sm" 
-                                @click="openAttendance(item)" 
+                                @click="openAttendance(item, pendingByAssignment(item.id)?.first_pending_date)" 
                             />
-                            <small v-if="pendingByAssignment(item.id)" class="col-span-2 text-orange-600">
-                                {{ pendingByAssignment(item.id).pending_count }} chamada(s) pendente(s)
-                                <span v-if="pendingByAssignment(item.id).first_pending_date_br">
-                                    desde {{ pendingByAssignment(item.id).first_pending_date_br }}
+                            <div
+                                v-if="pendingByAssignment(item.id)"
+                                class="col-span-2 p-2 border-round bg-orange-50 text-orange-800 dark:bg-orange-900/30 dark:text-orange-200 text-sm"
+                            >
+                                <span class="font-semibold">
+                                    {{ pendingByAssignment(item.id).pending_count }} chamada(s) pendente(s)
                                 </span>
-                            </small>
+                                <span v-if="pendingByAssignment(item.id).first_pending_date_br">
+                                    — a mais antiga: {{ pendingByAssignment(item.id).first_pending_date_br }}
+                                </span>
+                                <Button
+                                    label="Ir para pendência"
+                                    icon="pi pi-arrow-right"
+                                    size="small"
+                                    severity="warn"
+                                    text
+                                    class="mt-1 p-0"
+                                    @click="openAttendance(item, pendingByAssignment(item.id).first_pending_date)"
+                                />
+                            </div>
                             
                             <div class="col-span-2 relative">
                                 <Button

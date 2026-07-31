@@ -34,4 +34,16 @@ describe('useAuthStore', () => {
         store.user = { groups: ['Responsaveis'] };
         expect(store.isGuardian).toBe(true);
     });
+
+    it('canManageSharedDocuments para secretaria', () => {
+        const store = useAuthStore();
+        store.user = { groups: ['Secretaria'] };
+        expect(store.canManageSharedDocuments).toBe(true);
+    });
+
+    it('canBrowseSharedDocuments para professor', () => {
+        const store = useAuthStore();
+        store.user = { groups: ['Professores'] };
+        expect(store.canBrowseSharedDocuments).toBe(true);
+    });
 });

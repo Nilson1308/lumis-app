@@ -27,7 +27,8 @@
     </div>
     <div class="info-box">
         <strong>Turma:</strong> {{ classroom.name }} &nbsp;|&nbsp; <strong>Ano:</strong> {{ classroom.year }} &nbsp;|&nbsp;
-        <strong>Período:</strong> {{ period.start_date|date:"d/m/Y" }} a {{ period.end_date|date:"d/m/Y" }}
+        <strong>Período letivo:</strong> {{ period.name }} ({{ period.start_date|date:"d/m/Y" }} a {{ period.end_date|date:"d/m/Y" }}) &nbsp;|&nbsp;
+        <strong>Intervalo do relatório:</strong> {{ range_label }}
     </div>
     <h3 class="report-title">{{ report_title }}</h3>
     <table>

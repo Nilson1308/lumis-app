@@ -17,6 +17,9 @@ const periods = ref([]);
 const selectedPeriod = ref(null);
 const loading = ref(true);
 const savingGrade = ref(false);
+const assessmentNameLibrary = ref([]);
+const filteredAssessmentNames = ref([]);
+const loadingAssessmentNames = ref(false);
 
 const dedupeById = (items = []) => {
     const map = new Map();
@@ -59,6 +62,36 @@ const getPaginatedItems = async (endpoint, params = {}) => {
     }
 
     return items;
+};
+
+const loadAssessmentNameLibrary = async () => {
+    if (assessmentNameLibrary.value.length > 0) return;
+    loadingAssessmentNames.value = true;
+    try {
+        const res = await api.get('grades/assessment-names/', { params: { limit: 200 } });
+        assessmentNameLibrary.value = res.data?.names || [];
+    } catch (error) {
+        console.error('Erro ao carregar nomes de avaliação', error);
+        assessmentNameLibrary.value = [];
+    } finally {
+        loadingAssessmentNames.value = false;
+    }
+};
+
+const filterAssessmentNames = (query = '') => {
+    const q = query.trim().toLowerCase();
+    const source = assessmentNameLibrary.value;
+    if (!q) {
+        filteredAssessmentNames.value = source.slice(0, 30);
+        return;
+    }
+    filteredAssessmentNames.value = source
+        .filter((name) => name.toLowerCase().includes(q))
+        .slice(0, 30);
+};
+
+const searchAssessmentNames = (event) => {
+    filterAssessmentNames(event.query || '');
 };
 
 // --- DIALOG DE NOTA (Criação e Edição) ---
@@ -164,10 +197,12 @@ watch(selectedPeriod, () => {
 // --- AÇÕES PRINCIPAIS ---
 
 // 1. Abrir Dialog para NOVA Nota
-const openNewGradeDialog = (studentWrapper) => {
+const openNewGradeDialog = async (studentWrapper) => {
     currentStudent.value = studentWrapper;
     currentGradeId.value = null; // Modo Criação
     gradeForm.value = { name: '', value: null, weight: 1.0 };
+    await loadAssessmentNameLibrary();
+    filterAssessmentNames('');
     gradeDialog.value = true;
 };
 
@@ -179,30 +214,33 @@ const openDetailsDialog = (studentWrapper) => {
 };
 
 // 3. Abrir Dialog de EDIÇÃO (Vindo de dentro dos detalhes)
-const openEditGradeDialog = (grade) => {
+const openEditGradeDialog = async (grade) => {
     currentGradeId.value = grade.id; // Modo Edição
     gradeForm.value = { 
         name: grade.name, 
         value: parseFloat(grade.value), 
         weight: parseFloat(grade.weight) 
     };
+    await loadAssessmentNameLibrary();
+    filterAssessmentNames(grade.name || '');
     gradeDialog.value = true; // Reusa o mesmo dialog de formulário
 };
 
 // 4. Salvar (Create ou Update)
 const saveGrade = async () => {
     if (savingGrade.value) return;
-    if (!gradeForm.value.name || gradeForm.value.value === null) {
+    if (!gradeForm.value.name?.trim() || gradeForm.value.value === null) {
         toast.add({ severity: 'warn', summary: 'Atenção', detail: 'Preencha os dados.', life: 3000 });
         return;
     }
 
     savingGrade.value = true;
     try {
+        const assessmentName = gradeForm.value.name.trim();
         const payload = {
             enrollment: currentStudent.value.id,
             subject: assignment.value.subject,
-            name: gradeForm.value.name,
+            name: assessmentName,
             value: gradeForm.value.value,
             weight: gradeForm.value.weight,
             period: selectedPeriod.value
@@ -216,6 +254,18 @@ const saveGrade = async () => {
             // CRIAÇÃO (POST)
             await api.post('grades/', payload);
             toast.add({ severity: 'success', summary: 'Sucesso', detail: 'Nota lançada!', life: 3000 });
+        }
+
+        const trimmedName = gradeForm.value.name.trim();
+        if (trimmedName) {
+            const exists = assessmentNameLibrary.value.some(
+                (n) => n.toLowerCase() === trimmedName.toLowerCase()
+            );
+            if (!exists) {
+                assessmentNameLibrary.value = [...assessmentNameLibrary.value, trimmedName].sort((a, b) =>
+                    a.localeCompare(b, 'pt-BR', { sensitivity: 'base' })
+                );
+            }
         }
         
         gradeDialog.value = false;
@@ -324,7 +374,21 @@ onMounted(() => {
                 <div class="grid grid-cols-12 gap-6">
                     <div class="col-span-12">
                         <label class="font-bold block mb-2">Nome da Avaliação</label>
-                        <InputText v-model="gradeForm.name" placeholder="Ex: Trabalho, Prova..." autofocus fluid />
+                        <AutoComplete
+                            v-model="gradeForm.name"
+                            :suggestions="filteredAssessmentNames"
+                            placeholder="Ex: Trabalho, Prova..."
+                            :forceSelection="false"
+                            :loading="loadingAssessmentNames"
+                            completeOnFocus
+                            fluid
+                            autofocus
+                            @complete="searchAssessmentNames"
+                            @focus="filterAssessmentNames(gradeForm.name || '')"
+                        />
+                        <small class="text-500 block mt-1">
+                            Sugestões de toda a escola; você pode digitar um nome novo.
+                        </small>
                     </div>
                     
                     <div class="col-span-6">

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useConfirm } from 'primevue/useconfirm';
 import { useToast } from 'primevue/usetoast';
 import api from '@/service/api';
 import WeeklyCalendar from '@/components/WeeklyCalendar.vue';
@@ -9,6 +10,9 @@ import AttendanceStatsDialog from '@/components/AttendanceStatsDialog.vue';
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const confirm = useConfirm();
+
+const WEEKEND_DAYS = [0, 6];
 
 const assignmentId = route.params.id;
 
@@ -17,6 +21,7 @@ const assignment = ref(null);
 const students = ref([]);
 const loading = ref(true);
 const saving = ref(false);
+const resetting = ref(false);
 const weeklyDates = ref([]);
 const classSchedules = ref([]);
 const scheduledWeekdays = ref([]);
@@ -57,18 +62,32 @@ const hasScheduleRestriction = computed(() => scheduledWeekdays.value.length > 0
 const nonTeachingDatesSet = computed(() => new Set(nonTeachingDates.value));
 
 const disabledWeekdays = computed(() => {
-    if (!hasScheduleRestriction.value) return [];
-    const allowed = new Set(scheduledWeekdays.value);
-    return [0, 1, 2, 3, 4, 5, 6].filter((day) => !allowed.has(day));
+    const disabled = new Set(WEEKEND_DAYS);
+    if (hasScheduleRestriction.value) {
+        const allowed = new Set(scheduledWeekdays.value);
+        [0, 1, 2, 3, 4, 5, 6].forEach((day) => {
+            if (!allowed.has(day)) disabled.add(day);
+        });
+    }
+    return [...disabled];
 });
 
-const isSelectedDateAllowed = computed(() => {
-    if (!attendanceDate.value) return true;
-    const dateStr = formatDateForAPI(attendanceDate.value);
+const parseApiDate = (dateStr) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+};
+
+const isDateSelectable = (date) => {
+    if (!date) return false;
+    const dow = getWeekdayNumber(date);
+    if (WEEKEND_DAYS.includes(dow)) return false;
+    const dateStr = formatDateForAPI(date);
     if (nonTeachingDatesSet.value.has(dateStr)) return false;
     if (!hasScheduleRestriction.value) return true;
-    return scheduledWeekdays.value.includes(getWeekdayNumber(attendanceDate.value));
-});
+    return scheduledWeekdays.value.includes(dow);
+};
+
+const isSelectedDateAllowed = computed(() => isDateSelectable(attendanceDate.value));
 
 const disabledSpecificDates = computed(() =>
     nonTeachingDates.value
@@ -107,9 +126,17 @@ const loadClassData = async () => {
 
         students.value = initialStudents;
         await loadClassSchedules();
+        await loadPendingAttendance();
+
+        const queryDate = route.query.date;
+        if (queryDate && /^\d{4}-\d{2}-\d{2}$/.test(String(queryDate))) {
+            attendanceDate.value = parseApiDate(String(queryDate));
+        } else {
+            attendanceDate.value = resolveInitialAttendanceDate();
+        }
+
         await loadNonTeachingDatesForCurrentMonth();
         ensureAllowedDateSelection();
-        await loadPendingAttendance();
 
         // 4. Verifica se JÁ teve chamada nesta data
         await checkExistingAttendance();
@@ -199,28 +226,41 @@ const loadClassSchedules = async () => {
     }
 };
 
-const ensureAllowedDateSelection = () => {
-    if (!attendanceDate.value) return;
-    if (isSelectedDateAllowed.value) return;
-
-    const base = new Date(attendanceDate.value);
-    for (let i = 0; i < 21; i++) {
+const findNextSelectableDate = (fromDate, maxDays = 60) => {
+    const base = new Date(fromDate);
+    for (let i = 0; i < maxDays; i++) {
         const candidate = new Date(base);
         candidate.setDate(base.getDate() + i);
-        const candidateStr = formatDateForAPI(candidate);
-        const allowedBySchedule = !hasScheduleRestriction.value || scheduledWeekdays.value.includes(candidate.getDay());
-        const isHoliday = nonTeachingDatesSet.value.has(candidateStr);
-        if (allowedBySchedule && !isHoliday) {
-            attendanceDate.value = candidate;
-            toast.add({
-                severity: 'info',
-                summary: 'Data ajustada',
-                detail: 'A chamada foi posicionada para o próximo dia letivo com aula desta matéria.',
-                life: 3500
-            });
-            return;
-        }
+        if (isDateSelectable(candidate)) return candidate;
     }
+    return base;
+};
+
+const resolveInitialAttendanceDate = () => {
+    if (pendingAttendance.value.length > 0) {
+        return parseApiDate(pendingAttendance.value[0].date);
+    }
+    return findNextSelectableDate(new Date());
+};
+
+const ensureAllowedDateSelection = () => {
+    if (!attendanceDate.value) return;
+    if (isDateSelectable(attendanceDate.value)) return;
+
+    const previous = formatDateForAPI(attendanceDate.value);
+    attendanceDate.value = findNextSelectableDate(attendanceDate.value);
+    if (formatDateForAPI(attendanceDate.value) !== previous) {
+        toast.add({
+            severity: 'info',
+            summary: 'Data ajustada',
+            detail: 'Selecionamos o próximo dia letivo válido para esta matéria.',
+            life: 3500
+        });
+    }
+};
+
+const goToPendingDate = (dateStr) => {
+    attendanceDate.value = parseApiDate(dateStr);
 };
 
 // --- CARREGAR DATAS COM CHAMADA (mês visualizado) ---
@@ -362,6 +402,50 @@ const saveAttendance = async () => {
     }
 };
 
+const resetAttendanceDay = () => {
+    if (!assignment.value || !isSelectedDateAllowed.value) return;
+
+    confirm.require({
+        message: `Remover todos os registros de chamada do dia ${formatDateBR(attendanceDate.value)}? Os alunos voltarão ao estado inicial.`,
+        header: 'Resetar chamada do dia',
+        icon: 'pi pi-exclamation-triangle',
+        rejectLabel: 'Cancelar',
+        acceptLabel: 'Resetar',
+        acceptClass: 'p-button-danger',
+        accept: async () => {
+            resetting.value = true;
+            try {
+                const dateStr = formatDateForAPI(attendanceDate.value);
+                await api.post('attendance/reset-day/', {
+                    assignment: Number(assignmentId),
+                    classroom: assignment.value.classroom,
+                    subject: assignment.value.subject,
+                    date: dateStr,
+                });
+                toast.add({
+                    severity: 'success',
+                    summary: 'Chamada resetada',
+                    detail: 'Os registros do dia foram removidos.',
+                    life: 3000,
+                });
+                attendanceRecorded.value = false;
+                students.value.forEach((student) => {
+                    student.present = true;
+                    student.recorded = false;
+                });
+                await checkExistingAttendance();
+                await loadPendingAttendance();
+                await loadWeeklyDates();
+            } catch (error) {
+                const msg = error.response?.data?.error || error.response?.data?.detail || 'Erro ao resetar chamada.';
+                toast.add({ severity: 'error', summary: 'Falha', detail: msg, life: 5000 });
+            } finally {
+                resetting.value = false;
+            }
+        },
+    });
+};
+
 const goBack = () => {
     router.go(-1);
 };
@@ -375,6 +459,7 @@ onMounted(() => {
     <div class="col-12">
         <div class="card">
             <Toast />
+            <ConfirmDialog />
             
             <div class="flex flex-col md:flex-row justify-between items-center mb-4" v-if="assignment">
                 <div class="flex items-center mb-3 md:mb-0">
@@ -395,6 +480,15 @@ onMounted(() => {
                         :disabledDays="disabledWeekdays"
                         :disabledDates="disabledSpecificDates"
                     />
+                    <Button
+                        label="Resetar dia"
+                        icon="pi pi-refresh"
+                        severity="secondary"
+                        outlined
+                        :loading="resetting"
+                        :disabled="!isSelectedDateAllowed"
+                        @click="resetAttendanceDay"
+                    />
                     <Button label="Salvar Chamada" icon="pi pi-check" :loading="saving" @click="saveAttendance" />
                 </div>
             </div>
@@ -406,12 +500,26 @@ onMounted(() => {
                 A data selecionada não e um dia letivo valido para esta matéria (grade/calendário).
             </Message>
             <Message v-if="pendingAttendance.length > 0" severity="warn" class="mb-3">
-                Existem {{ pendingAttendance.length }} data(s) com chamada pendente ate hoje
-                <span v-if="pendingRange">
-                    (periodo {{ pendingRange.start_br || formatDateBR(pendingRange.start) }} a {{ pendingRange.end_br || formatDateBR(pendingRange.end) }}).
-                </span>
-                Primeiras pendencias:
-                {{ pendingAttendance.slice(0, 5).map((item) => item.date_br || formatDateBR(item.date)).join(', ') }}
+                <div class="flex flex-col gap-2">
+                    <span>
+                        {{ pendingAttendance.length }} chamada(s) pendente(s)
+                        <span v-if="pendingRange">
+                            ({{ pendingRange.start_br || formatDateBR(pendingRange.start) }} a
+                            {{ pendingRange.end_br || formatDateBR(pendingRange.end) }}).
+                        </span>
+                    </span>
+                    <div class="flex flex-wrap gap-2">
+                        <Button
+                            v-for="item in pendingAttendance.slice(0, 8)"
+                            :key="item.date"
+                            size="small"
+                            severity="warn"
+                            outlined
+                            :label="item.date_br || formatDateBR(item.date)"
+                            @click="goToPendingDate(item.date)"
+                        />
+                    </div>
+                </div>
             </Message>
 
             <!-- Calendário Semanal -->
@@ -419,6 +527,7 @@ onMounted(() => {
                 <WeeklyCalendar 
                     :attendance-dates="weeklyDates" 
                     :current-date="attendanceDate"
+                    :disabled-weekdays="disabledWeekdays"
                     @update:current-date="attendanceDate = $event"
                 />
             </div>

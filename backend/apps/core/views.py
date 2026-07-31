@@ -140,6 +140,7 @@ class PasswordResetConfirmView(APIView):
 
         if default_token_generator.check_token(user, token):
             user.set_password(password)
+            user.must_change_password = False
             user.save()
             return Response({'message': 'Senha alterada com sucesso!'})
         else:
@@ -184,6 +185,35 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         serializer = self.get_serializer(request.user)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated], url_path='change-password')
+    def change_password(self, request):
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not new_password or not confirm_password:
+            return Response({'detail': 'Informe nova senha e confirmação.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_password != confirm_password:
+            return Response({'detail': 'As senhas não conferem.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 8:
+            return Response({'detail': 'A senha deve ter no mínimo 8 caracteres.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        user.set_password(new_password)
+        user.must_change_password = False
+        user.save()
+
+        register_access_audit(
+            request=request,
+            action='USER_PASSWORD_CHANGED',
+            resource_type='user',
+            resource_id=user.id,
+            details={'first_access_flow': True}
+        )
+
+        return Response({'detail': 'Senha alterada com sucesso.'})
 
     def perform_create(self, serializer):
         user = serializer.save()

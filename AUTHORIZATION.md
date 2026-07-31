@@ -65,6 +65,20 @@ Documento de referência para regras de acesso por perfil nos endpoints crítico
 | `/api/schedules/` | `GET` | ✅ (turmas vinculadas) | ✅ (turmas dos filhos) | ✅ | Queryset por perfil |
 | `/api/schedules/` | `POST/PATCH/DELETE` | ❌ | ❌ | ✅ | Apenas perfis de gestão editam grade |
 
+## Documentos compartilhados
+
+| Endpoint | Método | Professor | Responsável | Coordenação/Admin | Regra aplicada |
+|---|---|---:|---:|---:|---|
+| `/api/shared-documents/` | `GET` | ✅ (escopo de audiência) | ✅ (escopo de audiência/vínculo) | ✅ | Filtro por público-alvo, turma e segmento |
+| `/api/shared-documents/` | `POST` | ❌ | ❌ | ✅ | Criação apenas para perfis de gestão |
+| `/api/shared-documents/{id}/` | `PATCH/DELETE` | ❌ | ❌ | ✅ | Edição/exclusão apenas para perfis de gestão |
+| `/api/shared-documents/{id}/mark-read/` | `POST` | ✅ (no escopo) | ✅ (no escopo) | ❌ | Marca leitura do próprio usuário |
+| `/api/shared-documents/{id}/read-report/` | `GET` | ❌ | ❌ | ✅ | Relatório de leitura só para gestão |
+
+**Público-alvo suportado:** `ALL`, `TEACHERS`, `GUARDIANS`, `CLASSROOM`, `SEGMENT`.
+
+**Notificações:** ao publicar documento ativo (criação ou reativação), o sistema notifica destinatários elegíveis via `/api/notifications/` com link para a biblioteca (`/teacher/documentos` ou `/portal/documentos`).
+
 ## Como validar antes de release
 
 Executar suíte mínima de autorização:
@@ -74,7 +88,8 @@ docker compose -f docker-compose.prod.yml exec backend python manage.py test \
   apps.core.tests.UserViewSetAuthorizationTests \
   apps.academic.tests.AuthorizationHardeningTests \
   apps.academic.tests.AttendanceScheduleRulesTests \
-  apps.academic.tests.ParentPortalSecurityTests
+  apps.academic.tests.ParentPortalSecurityTests \
+  apps.documents.tests
 ```
 
 ## Observações de governança

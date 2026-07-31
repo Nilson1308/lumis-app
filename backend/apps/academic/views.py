@@ -8,6 +8,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import ValidationError, PermissionDenied
 from django.db import transaction
 from django.db.models import Count, Avg, Q
+from collections import defaultdict
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db.utils import ProgrammingError, OperationalError
@@ -36,6 +37,7 @@ from .serializers import (
     StudentChecklistConfigSerializer, StudentDailyChecklistSerializer
 )
 from .permissions import IsGuardianOwner, IsGuardianOfStudent
+from .schedule_utils import schedule_day_of_week
 from apps.coordination.models import StudentReport
 from apps.core.audit import register_access_audit
 from apps.core.models import Notification, SchoolAccount
@@ -261,48 +263,56 @@ class StudentViewSet(viewsets.ModelViewSet):
         if not enrollment:
             return Response([])
 
-        grades = Grade.objects.filter(enrollment=enrollment)
-        
-        # 3. Pivot: Organiza por Matéria
-        report = {}
+        grades = Grade.objects.filter(enrollment=enrollment).select_related('subject', 'period')
 
         subjects = Subject.objects.filter(teacherassignment__classroom=enrollment.classroom).distinct()
 
-        for subj in subjects:
-            report[subj.name] = {"1": "-", "2": "-", "3": "-", "4": "-", "final": "-"}
+        # Agrega por matéria e bimestre: média PONDERADA no período (igual ao PDF em reports.py)
+        aggregates = defaultdict(lambda: defaultdict(lambda: {'sw': 0.0, 'w': 0.0}))
+        valid_term_keys = {'1', '2', '3', '4'}
 
-        # 4. Preenche Notas
         for g in grades:
-            subj_name = None
-            
-            # Tenta Caminho 1: Ligação direta Grade -> Subject
-            if hasattr(g, 'subject') and g.subject:
-                subj_name = g.subject.name
-            # Tenta Caminho 2: Grade -> Assignment -> Subject
-            elif hasattr(g, 'assignment') and g.assignment and hasattr(g.assignment, 'subject') and g.assignment.subject:
-                subj_name = g.assignment.subject.name
-            
-            if not subj_name:
+            subj_name = g.subject.name if g.subject_id else None
+
+            if not subj_name or not g.period:
                 continue
 
-            # Se a matéria não estava na lista (ex: nota lançada sem atribuição vigente), adiciona
-            if subj_name not in report:
-                report[subj_name] = {"1": "-", "2": "-", "3": "-", "4": "-", "final": "-"}
+            period_name = (g.period.name or '').strip()
+            if not period_name:
+                continue
+            term_key = period_name[0]
+            if term_key not in valid_term_keys:
+                continue
 
-            # Lógica de Período (Bimestre)
-            if g.period:
-                # Pega "1" de "1º Bimestre"
-                term_key = str(g.period.name)[0]
-                if term_key in report[subj_name]:
-                    report[subj_name][term_key] = g.value
+            sw = float(g.value) * float(g.weight)
+            w = float(g.weight)
+            bucket = aggregates[subj_name][term_key]
+            bucket['sw'] += sw
+            bucket['w'] += w
 
-        # 5. Formata para Lista
+        def _row_for_subject(subject_name):
+            row = {"1": "-", "2": "-", "3": "-", "4": "-", "final": "-"}
+            for tk in valid_term_keys:
+                agg = aggregates.get(subject_name, {}).get(tk)
+                if agg and agg['w'] > 0:
+                    period_avg = agg['sw'] / agg['w']
+                    row[tk] = f"{period_avg:.1f}"
+            return row
+
+        report = {}
+        for subj in subjects:
+            report[subj.name] = _row_for_subject(subj.name)
+
+        for subject_name in aggregates:
+            if subject_name not in report:
+                report[subject_name] = _row_for_subject(subject_name)
+
         data = []
         for subject, grades_dict in report.items():
             row = {"subject": subject}
             row.update(grades_dict)
             data.append(row)
-            
+
         return Response(data)
 
     @action(detail=True, methods=['get'], permission_classes=[IsAuthenticated], url_path='report-card-pdf')
@@ -564,6 +574,44 @@ class GradeViewSet(viewsets.ModelViewSet):
     serializer_class = GradeSerializer
     filterset_fields = ['enrollment', 'subject', 'enrollment__classroom', 'period']
 
+    @staticmethod
+    def _distinct_assessment_names(queryset=None, search=''):
+        """Nomes distintos de avaliação (case-insensitive), escopo escola."""
+        qs = queryset if queryset is not None else Grade.objects.all()
+        qs = qs.exclude(name__isnull=True).exclude(name__exact='')
+
+        canonical_by_key = {}
+        for raw_name in qs.values_list('name', flat=True).iterator(chunk_size=500):
+            cleaned = (raw_name or '').strip()
+            if not cleaned:
+                continue
+            key = cleaned.casefold()
+            if key not in canonical_by_key:
+                canonical_by_key[key] = cleaned
+
+        names = sorted(canonical_by_key.values(), key=lambda value: value.casefold())
+        if search:
+            needle = search.strip().casefold()
+            if needle:
+                names = [name for name in names if needle in name.casefold()]
+        return names
+
+    @action(detail=False, methods=['get'], url_path='assessment-names')
+    def assessment_names(self, request):
+        """
+        Biblioteca de nomes de avaliação já usados na escola.
+        Query opcional: q (filtro parcial, case-insensitive).
+        """
+        search = (request.query_params.get('q') or '').strip()
+        limit_param = request.query_params.get('limit')
+        try:
+            limit = min(int(limit_param), 100) if limit_param else 50
+        except (TypeError, ValueError):
+            limit = 50
+
+        names = self._distinct_assessment_names(search=search)[:limit]
+        return Response({'names': names, 'count': len(names)})
+
 class AttendanceViewSet(viewsets.ModelViewSet):
     queryset = Attendance.objects.all().order_by('date')
     serializer_class = AttendanceSerializer
@@ -678,7 +726,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         pending = []
         current = start_date
         while current <= end_date:
-            if current.weekday() in schedule_weekdays and current not in blocked_dates:
+            if schedule_day_of_week(current) in schedule_weekdays and current not in blocked_dates:
                 recorded_count = Attendance.objects.filter(
                     enrollment__classroom=assignment.classroom,
                     subject=assignment.subject,
@@ -867,6 +915,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         except ValueError:
             return Response({"error": "Formato de data inválido. Use YYYY-MM-DD."}, status=400)
 
+        if schedule_day_of_week(date_obj) in (0, 6):
+            return Response(
+                {"error": "Não é possível lançar chamada em sábado ou domingo."},
+                status=400,
+            )
+
         if date_obj in self._non_teaching_dates(classroom_id, date_obj, date_obj):
             return Response(
                 {"error": "A data informada é não letiva (feriado/recesso). Não é necessário lançar chamada."},
@@ -915,7 +969,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             )
             if schedule_qs.exists():
                 allowed_weekdays = set(schedule_qs.values_list('day_of_week', flat=True))
-                if date_obj.weekday() not in allowed_weekdays:
+                if schedule_day_of_week(date_obj) not in allowed_weekdays:
                     return Response(
                         {
                             "error": (
@@ -1012,6 +1066,76 @@ class AttendanceViewSet(viewsets.ModelViewSet):
                 {"error": "Erro interno ao salvar chamada."},
                 status=500
             )
+
+    @action(detail=False, methods=['post'], url_path='reset-day')
+    def reset_day(self, request):
+        """Remove todos os registros de frequência do dia para turma/matéria."""
+        subject_id = request.data.get('subject')
+        classroom_id = request.data.get('classroom')
+        assignment_id = request.data.get('assignment')
+        date_str = request.data.get('date')
+
+        if not subject_id or not classroom_id or not date_str:
+            return Response(
+                {"error": "Matéria, turma e data são obrigatórios."},
+                status=400,
+            )
+
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"error": "Formato de data inválido. Use YYYY-MM-DD."}, status=400)
+
+        if schedule_day_of_week(date_obj) in (0, 6):
+            return Response(
+                {"error": "Não é possível resetar chamada em sábado ou domingo."},
+                status=400,
+            )
+
+        user = request.user
+        is_power_user = self._is_power_user(user)
+
+        assignment = None
+        if assignment_id:
+            assignment = TeacherAssignment.objects.filter(
+                id=assignment_id,
+                subject_id=subject_id,
+                classroom_id=classroom_id,
+            ).first()
+
+        if not is_power_user:
+            if assignment:
+                if assignment.teacher_id != user.id:
+                    return Response(
+                        {"error": "Você não pode resetar chamada de outro professor."},
+                        status=403,
+                    )
+            elif not self._teacher_can_access_scope(user, classroom_id, subject_id):
+                return Response(
+                    {"error": "Você não possui atribuição para esta matéria/turma."},
+                    status=403,
+                )
+
+        self._assert_attendance_scope_access(request, classroom_id, subject_id)
+
+        deleted_count, _ = Attendance.objects.filter(
+            enrollment__classroom_id=classroom_id,
+            subject_id=subject_id,
+            date=date_obj,
+        ).delete()
+
+        register_access_audit(
+            request=request,
+            action='ATTENDANCE_RESET_DAY',
+            resource_type='attendance',
+            resource_id=f'{classroom_id}:{subject_id}:{date_str}',
+            details={'deleted': deleted_count},
+        )
+
+        return Response({
+            "message": "Chamada do dia removida com sucesso.",
+            "deleted": deleted_count,
+        })
 
     @action(detail=False, methods=['get'])
     def weekly_dates(self, request):

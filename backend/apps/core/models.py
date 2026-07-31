@@ -8,6 +8,7 @@ def default_non_teaching_event_types():
 class User(AbstractUser):
     is_teacher = models.BooleanField(default=False)
     is_coordinator = models.BooleanField(default=False)
+    must_change_password = models.BooleanField(default=False)
     
     class Meta:
         # Isso garante que o Django use a tabela padrão 'auth_user' se quiser,
