@@ -15,7 +15,8 @@ urlpatterns = [
     path('api/', include('apps.communication.urls')),
     path('api/', include('apps.support.urls')),
     path('api/', include('apps.documents.urls')),
-    
+    path('api/', include('apps.finance.urls')),
+
     # Rotas de Autenticação
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # Login
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # Atualizar Token

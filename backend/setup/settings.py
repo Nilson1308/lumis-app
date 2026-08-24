@@ -70,6 +70,7 @@ INSTALLED_APPS = [
     'apps.communication',
     'apps.support',
     'apps.documents',
+    'apps.finance',
 ]
 
 MIDDLEWARE = [

@@ -293,23 +293,44 @@ Após cada release relevante, registe data, commit e resultado do `check --deplo
 Referência do servidor:
 - Certificado: `/etc/letsencrypt/live/app.sthomasmogi.com.br/fullchain.pem`
 - Chave: `/etc/letsencrypt/live/app.sthomasmogi.com.br/privkey.pem`
+- Webroot (renovação sem parar o Nginx): `/var/www/certbot`
 
 Verificar validade:
 
 ```bash
+sudo openssl x509 -in /etc/letsencrypt/live/app.sthomasmogi.com.br/fullchain.pem -noout -dates
 sudo certbot certificates
 ```
 
-Testar renovação (sem efetivar):
+Renovação manual (se expirado ou próximo do vencimento):
+
+```bash
+# Com webroot configurado — Nginx continua no ar
+sudo certbot renew --force-renewal
+docker compose -f docker-compose.prod.yml restart frontend
+```
+
+Testar renovação automática (sem efetivar):
 
 ```bash
 sudo certbot renew --dry-run
 ```
 
-Como o `docker-compose.prod.yml` monta `/etc/letsencrypt` no serviço `frontend`, após renovação pode ser necessário recarregar o Nginx:
+**Problema comum:** renovação com `standalone` falha se a porta 80 estiver em uso pelo container `frontend`. A configuração atual usa **webroot** via `/.well-known/acme-challenge/` no Nginx.
+
+Se a renovação falhar mesmo assim:
 
 ```bash
-docker compose -f docker-compose.prod.yml restart frontend
+docker compose -f docker-compose.prod.yml stop frontend
+sudo certbot renew --force-renewal
+docker compose -f docker-compose.prod.yml start frontend
+```
+
+Após alterar `frontend/nginx/default.conf`, rebuild do frontend:
+
+```bash
+docker compose -f docker-compose.prod.yml build frontend
+docker compose -f docker-compose.prod.yml up -d frontend
 ```
 
 ---

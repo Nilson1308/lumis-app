@@ -298,6 +298,19 @@ const router = createRouter({
                         breadcrumb: ['Comunicação', 'Mural de Avisos']
                     }
                 },
+                // --- FINANCEIRO ---
+                {
+                    path: '/finance/agenda-futura',
+                    name: 'finance-agenda-futura',
+                    component: () => import('@/views/pages/finance/IsaacAgendaFuture.vue'),
+                    meta: { breadcrumb: 'Agenda Futura', requiresFinanceAccess: true }
+                },
+                {
+                    path: '/finance/fluxo-caixa',
+                    name: 'finance-cash-flow',
+                    component: () => import('@/views/pages/finance/CashFlow.vue'),
+                    meta: { breadcrumb: 'Fluxo de Caixa', requiresFinanceAccess: true }
+                },
             ]
         },
         
@@ -357,6 +370,8 @@ router.beforeEach(async (to, from, next) => {
     } else if (to.matched.some((r) => r.meta.requiresDocumentManager) && !authStore.canManageSharedDocuments) {
         next({ name: 'accessDenied' });
     } else if (to.matched.some((r) => r.meta.requiresDocumentBrowser) && !authStore.canBrowseSharedDocuments) {
+        next({ name: 'accessDenied' });
+    } else if (to.matched.some((r) => r.meta.requiresFinanceAccess) && !authStore.canAccessFinance) {
         next({ name: 'accessDenied' });
     } else {
         next();

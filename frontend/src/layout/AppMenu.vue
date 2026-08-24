@@ -140,6 +140,25 @@ watchEffect(() => {
             ]
         });
     }
+
+    if (authStore.canAccessFinance) {
+        newMenu.push({
+            label: 'Financeiro',
+            items: [
+                {
+                    label: 'Agenda Futura',
+                    icon: 'pi pi-fw pi-calendar-clock',
+                    to: { name: 'finance-agenda-futura' }
+                },
+                {
+                    label: 'Fluxo de Caixa',
+                    icon: 'pi pi-fw pi-chart-bar',
+                    to: { name: 'finance-cash-flow' }
+                }
+            ]
+        });
+    }
+
     if (authStore.canBrowseSharedDocuments && authStore.isTeacher && !authStore.canManageSharedDocuments) {
         newMenu.push({
             label: 'Documentos',

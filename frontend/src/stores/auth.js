@@ -80,10 +80,27 @@ export const useAuthStore = defineStore('auth', {
             );
         },
 
+        /** Módulo financeiro (espelha IsFinanceUser no backend). */
+        canAccessFinance: (state) => {
+            if (state.user?.is_superuser || state.user?.is_staff) return true;
+            const g = state.user?.groups;
+            if (!g) return false;
+            const power = [
+                'Secretaria',
+                'Coordenadores',
+                'Coordenação',
+                'Coordenacao',
+                'Direção',
+                'Direcao',
+                'Diretoria',
+            ];
+            return power.some((name) => g.includes(name));
+        },
+
         isTeacher: (state) => {
             return state.user?.groups?.includes('Professores') || state.user?.is_superuser;
         },
-    
+
         isGuardian: (state) => {
             const g = state.user?.groups;
             if (!g) return false;
